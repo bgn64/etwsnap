@@ -61,6 +61,7 @@ public class FrameSaver
     /// <param name="frames">The frames to save</param>
     /// <param name="options">Options controlling how frames are saved</param>
     /// <returns>Number of frames successfully saved</returns>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
     public static int SaveFrames(List<FrameData> frames, FrameSaveOptions options)
     {
         if (frames == null || frames.Count == 0)
@@ -141,6 +142,7 @@ public class FrameSaver
     /// <summary>
     /// Saves a single frame to disk
     /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
     private static void SaveFrame(FrameData frame, string filename, ImageFormat format, FrameSaveOptions options)
     {
         // Create bitmap from frame data
@@ -157,12 +159,15 @@ public class FrameSaver
         try
         {
             // Copy pixel data to bitmap
-            System.Runtime.InteropServices.Marshal.Copy(
-                frame.PixelData,
-                0,
-                bitmapData.Scan0,
-                frame.PixelData.Length
-            );
+            if (frame.PixelData != null)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(
+                    frame.PixelData,
+                    0,
+                    bitmapData.Scan0,
+                    frame.PixelData.Length
+                );
+            }
         }
         finally
         {
@@ -195,6 +200,7 @@ public class FrameSaver
     /// <summary>
     /// Gets the System.Drawing.Imaging.ImageFormat for a FrameImageFormat
     /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
     private static ImageFormat GetImageFormat(FrameImageFormat format)
     {
         return format switch
@@ -223,6 +229,7 @@ public class FrameSaver
     /// <summary>
     /// Gets the image encoder for a specific format
     /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
     private static ImageCodecInfo? GetEncoder(ImageFormat format)
     {
         var codecs = ImageCodecInfo.GetImageEncoders();

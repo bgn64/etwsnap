@@ -103,6 +103,7 @@ public class RecordingStateManager : IRecordingStateManager
         }
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
     public bool StopRecording(string? filePath = null)
     {
         lock (_lockObj)

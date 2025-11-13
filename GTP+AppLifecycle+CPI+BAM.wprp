@@ -1,0 +1,646 @@
+<?xml version="1.0" standalone='yes'?>
+
+<WindowsPerformanceRecorder Author="COSINE Fundamentals Developer Insights Data on Demand for Developers Team" Version="1">
+	<Profiles>
+		<SystemCollector Id="SystemCollector_General_Mobile_+_CPI" Name="DiagTrack_AlternativeTrace_KernelLogger" HostGuestCorrelation="true">
+			<BufferSize Value="256" />
+			<Buffers Value="3.57" PercentageOfTotalMemory="true" MaximumBufferSpace="154" />
+			<StackCaching BucketCount="256" CacheSize="3072" />
+		</SystemCollector>
+		<EventCollector Id="EventCollector_General_Mobile_Memory" Name="General_Mobile_Memory_EC_0" HostGuestCorrelation="true">
+			<BufferSize Value="256" />
+			<Buffers Value="0.5" PercentageOfTotalMemory="true" MaximumBufferSpace="1" />
+		</EventCollector>
+		<EventCollector Id="EventCollector_XAML_PerfTrack_UTC_BAM" Name="XAML+PerfTrack+UTC+BAM_EC_1" HostGuestCorrelation="true">
+			<BufferSize Value="256" />
+			<Buffers Value="1.909" PercentageOfTotalMemory="true" MaximumBufferSpace="38" />
+		</EventCollector>
+		<EventCollector Id="EventCollector_GTP_Desktop_TEMP_BAM" Name="GTP_Desktop_TEMP+BAM_EC_2" HostGuestCorrelation="true">
+			<BufferSize Value="256" />
+			<Buffers Value="0.931" PercentageOfTotalMemory="true" MaximumBufferSpace="29" />
+		</EventCollector>
+		<EventCollector Id="EventCollector_EventTracing" Name="EventTracing_EC_3" HostGuestCorrelation="true">
+			<BufferSize Value="256" />
+			<Buffers Value="0.09" PercentageOfTotalMemory="true" MaximumBufferSpace="2" />
+		</EventCollector>
+		<SystemProvider Id="SystemProvider_General_Mobile_+_CPI">
+			<Keywords>
+				<Keyword Value="Power" />
+				<Keyword Value="VAMap" />
+				<Keyword Value="CSwitch" />
+				<Keyword Value="DPC" />
+				<Keyword Value="Interrupt" />
+				<Keyword Value="Loader" />
+				<Keyword Value="DiskIO" />
+				<Keyword Value="HardFaults" />
+				<Keyword Value="ProcessThread" />
+				<Keyword Value="SampledProfile" />
+				<CustomKeyword Value="0x20000200" />
+				<CustomKeyword Value="0x8" />
+				<CustomKeyword Value="0x20002000" />
+				<CustomKeyword Value="0x20001000" />
+			</Keywords>
+			<Stacks>
+				<Stack Value="CSwitch" />
+				<Stack Value="SampledProfile" />
+				<Stack Value="ReadyThread" />
+				<Stack Value="ThreadCreate" />
+				<Stack Value="ProcessCreate" />
+				<Stack Value="ProcessDelete" />
+				<Stack Value="ThreadDelete" />
+				<CustomStack Value="0x535" />
+			</Stacks>
+		</SystemProvider>
+		<HardwareCounter Id="HardwareCounter_General_Mobile_+_CPI" Strict="false">
+			<Counters>
+				<Counter Value="TotalCycles"></Counter>
+				<Counter Value="InstructionRetired"></Counter>
+			</Counters>
+			<Events>
+				<Event Value="CSwitch"></Event>
+			</Events>
+		</HardwareCounter>
+		<EventProvider Id="EP_Microsoft-Windows-Kernel-Memory_0_0_68_0_0_0" Level="0" Name="d1d93ef7-e1f2-4f45-9943-03d245fe6c00" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Kernel-Process_16_0_68_1_0_0" Level="0" Name="22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x10" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-XAML_0_4_4434_0_0_0" Level="4" Name="531a35ab-63ce-4bcf-aa98-f88c7a89e455" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-WindowsMobile-Splash_0_4_4434_1_0_0" Level="4" Name="872c8950-0def-4d5b-83f6-57dd027f88ce" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-WindowsPhone-Silverlight_0_4_4434_2_0_0" Level="4" Name="aa087e0e-0b35-4e28-8f3a-440c3f51eef1" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-WindowsMobile-Compositor_0_4_4434_3_0_0" Level="4" Name="85fffba1-cf12-402c-b9b3-29a3217bb007" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-WindowsPhone-MobileUI_0_4_4434_4_0_0" Level="4" Name="f243dc34-205e-4d34-94ca-36e8c0859787" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-WindowsPhone-Shell-Chrome_0_4_4434_5_0_0" Level="4" Name="9f79511c-06ad-4812-b18b-90006088d2ca" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-WindowsMobile-UIXMobile_0_4_4434_6_0_0" Level="4" Name="0c0ffee0-f4b1-4f4d-b591-fb3175b13413" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.Phone.ThemeEngine_0_0_4434_7_0_0" Level="0" Name="8b633711-a27f-4f38-8a02-47dbc27c248e" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-AppXDeployment-Server_0_0_4434_8_0_0" Level="0" Name="3f471139-acb7-4a01-b7a7-ff5da4ba2d43" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.ApplicationModel.DesktopAppx_0_0_4434_9_S_0" Level="0" Name="5526aed1-f6e5-5896-cbf0-27d9f59b6be7" NonPagedMemory="true" EventKey="true" Stack="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_bda92ae8-9f11-4d49-ba1d-a4c2abca692e_3_0_4434_10_0_0" Level="0" Name="bda92ae8-9f11-4d49-ba1d-a4c2abca692e" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x3" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_9474a749-a98d-4f52-9f45-5b20247e4f01_3_0_4434_11_0_0" Level="0" Name="9474a749-a98d-4f52-9f45-5b20247e4f01" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x3" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_969e8d6b-df02-56e3-a058-ec3bef103534_0_0_4434_12_0_0" Level="0" Name="969e8d6b-df02-56e3-a058-ec3bef103534" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.BackgroundActivityModerator_0_5_4434_13_0_R" Level="5" Name="d82215e3-bddf-54fa-895b-685099453b1c" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+			<CaptureStateOnSave Timeout="0">
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</CaptureStateOnSave>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.Shell.BackgroundActivityModerator_0_5_4434_14_0_R" Level="5" Name="4e2b1375-f519-50a6-bfae-8c8a1a82d708" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+			<CaptureStateOnSave Timeout="0">
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</CaptureStateOnSave>
+		</EventProvider>
+		<EventProvider Id="EventProvider_PerfTrack" Name="PerfTrack" NonPagedMemory="true" Level="4" />
+		<EventProvider Id="EventProvider_UTC" Name="UTC" NonPagedMemory="true" Level="4" />
+		<EventProvider Id="EventProvider_TelAssert" Name="6d1b249d-131b-468a-899b-fb0ad9551772" NonPagedMemory="true" Level="5" Stack="true" />
+		<EventProvider Id="EP_Microsoft-Windows-Win32k_2531328_0_4491_0_0_0" Level="0" Name="8c416c79-d49b-4f01-a467-e56d3aa8234c" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x26A000" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Diagnostics-PerfTrack_1114112_4_4491_1_0_0" Level="4" Name="030f2f57-abd0-4427-bcf1-3a3587d7dc7d" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x110000" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Diagnostics-PerfTrack-Counters_0_0_4491_2_0_R" Level="0" Name="c06ed57a-a7bd-42d7-b5ff-77a9dec5732d" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+			<CaptureStateOnSave Timeout="0">
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</CaptureStateOnSave>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-COMRuntime_3_0_4491_3_0_0" Level="0" Name="bf406804-6afa-46e7-8a48-6c357e1d6d61" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x3" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-AntiMalware-Engine_0_0_4491_4_0_0" Level="0" Name="0a002690-3839-4e3a-b3b6-96d8df868d99" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Kernel-Prefetch_32_0_4491_5_0_0" Level="0" Name="5322d61a-9efa-4bc3-a3f9-14be95c144f8" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x20" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Immersive-Shell_2_0_4491_6_0_0" Level="0" Name="315a8872-923e-4ea2-9889-33cd4754bf64" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x2" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-UserModePowerService_0_0_4491_7_0_R" Level="0" Name="ce8dee0b-d539-4000-b0f8-77bed049c590" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+			<CaptureStateOnSave Timeout="0">
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</CaptureStateOnSave>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Kernel-Pep_0_0_4491_8_0_R" Level="0" Name="5412704e-b2e1-4624-8ffd-55777b8f7373" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+			<CaptureStateOnSave Timeout="0">
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</CaptureStateOnSave>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-ProcessStateManager_0_0_4491_9_0_0" Level="0" Name="d49918cf-9489-4bf1-9d7b-014d864cf71f" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-CodeIntegrity_0_0_4491_10_0_0" Level="0" Name="4ee76bd8-3cf4-44a0-a0ac-3937643e37a3" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-StorDiag_2_0_4491_11_0_0" Level="0" Name="f5d05b38-80a6-4653-825d-c414e4ab3c68" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x2" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Services_0_0_4491_12_0_0" Level="0" Name="0063715b-eeda-4007-9429-ad526f62696e" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Services-Svchost_0_0_4491_13_0_0" Level="0" Name="06184c97-5201-480e-92af-3a3626c5b140" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-WindowsPhone-ExecManLogPublisher_0_0_4491_14_0_0" Level="0" Name="82c8ad90-5f3c-11be-bd9a-85bb5f50dfa4" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.ProcessLifetimeManager_0_0_4491_15_0_0" Level="0" Name="072665fb-8953-5a85-931d-d06aeab3d109" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Kernel-Power_164_0_4491_16_0_R" Level="0" Name="331c3b3a-2005-44c2-ac5e-77220c37d6b4" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xA4" />
+			</Keywords>
+			<CaptureStateOnSave Timeout="0">
+				<Keyword Value="0xA4" />
+			</CaptureStateOnSave>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Kernel-EventTracing_64_0_4491_17_0_0" Level="0" Name="b675ec37-bdb6-4648-bc92-f3fdc74d3ca2" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x40" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Shell-Launcher_0_0_4491_18_0_0" Level="0" Name="3d6120a6-0986-51c4-213a-e2975903051d" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-AppModel-Exec_0_0_4491_19_0_0" Level="0" Name="eb65a492-86c0-406a-bace-9912d595bd69" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.AppLifeCycle_0_0_4491_20_0_0" Level="0" Name="ef00584a-2655-462c-bc24-e7de630e7fbf" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_TwinUITraceLogging_0_0_4491_21_0_0" Level="0" Name="fa386406-8e25-47f7-a03f-413635a55dc0" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-WindowsPhone-AppPlatProvider_4243744_0_4491_22_0_0" Level="0" Name="3c42000f-cc27-48c3-a005-48f6e38b131f" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x40C120" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Desktop-ApplicationFrame_0_0_4491_23_0_0" Level="0" Name="678e492b-5de1-50c5-7219-ae4aa7d6a141" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Desktop-ApplicationManager_0_0_4491_24_0_0" Level="0" Name="35d4a1fa-4036-40dc-a907-e330f3104e24" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.Desktop.Shell.ViewManagerInterop_0_0_4491_25_0_0" Level="0" Name="15322370-3694-59f5-f979-0c7a918b81da" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.WindowsErrorReporting_0_0_4491_26_0_0" Level="0" Name="cc79cf77-70d9-4082-9b52-23f3a3e92fe4" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.BrokerInfrastructure_0_0_4491_27_0_0" Level="0" Name="63b6c2d2-0440-44de-a674-aa51a251b123" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Kernel-Acpi_2_4_4491_28_0_R" Level="4" Name="c514638f-7723-485b-bcfc-96565d735d4a" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x2" />
+			</Keywords>
+			<CaptureStateOnSave Timeout="0">
+				<Keyword Value="0x2" />
+			</CaptureStateOnSave>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.HangReporting_0_0_4491_29_0_0" Level="0" Name="3e0d88de-ae5c-438a-bb1c-c2e627f8aecb" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.FaultReporting_0_0_4491_30_0_0" Level="0" Name="1377561d-9312-452c-ad13-c4a1c9c906e0" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-WindowsPhone-CoreMessaging_4_5_4491_31_0_0" Level="5" Name="922cdcf3-6123-42da-a877-1a24f23e39c5" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x4" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-OneCore-MinInput_0_4_4491_32_0_0" Level="4" Name="973c694b-79a6-480e-89a5-c8c20745d461" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_WPR_Status_65536_0_4491_33_0_0" Level="0" Name="36b6f488-aad7-48c2-afe3-d4ec2c8b46fa" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x10000" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.IoRate_0_4_4491_34_0_0" Level="4" Name="fa93663e-d1d9-5e9c-24a0-c2040a13062f" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Kernel-Process_12288_0_4491_35_0_0" Level="0" Name="22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x3000" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.AppLifeCycle.UI_0_0_4491_36_0_0" Level="0" Name="ee97cdc4-b095-5c70-6e37-a541eb74c2b5" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.ClipC_35184372088832_0_4491_37_0_0" Level="0" Name="ed0c10a5-5396-4a96-9ee3-6f4aa0d1120d" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x200000000000" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.ClipSp_35184372088832_0_4491_38_0_0" Level="0" Name="b4b126de-32fe-4591-9ac5-b0778d79a0e7" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x200000000000" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.ClipSvc_35184372088832_0_4491_39_0_0" Level="0" Name="b94d76c5-9d56-454a-8d1b-6ca30898160e" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x200000000000" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.LicenseManager.Telemetry_35184372088832_0_4491_40_0_0" Level="0" Name="af9f58ec-0c04-4be9-9eb5-55ff6dbe72d7" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x200000000000" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-WindowsPhone-CoreUIComponents_4294967295_4_4491_41_0_0" Level="4" Name="a0b7550f-4e9a-4f03-ad41-b8042d06a2f7" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_0001376b-930d-50cd-2b29-491ca938cd54_0_0_4491_42_0_0" Level="0" Name="0001376b-930d-50cd-2b29-491ca938cd54" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-AppModel-Runtime_0_5_4491_43_0_0" Level="5" Name="f1ef270a-0d32-4352-ba52-dbab41e1d859" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.DesktopActivityModerator_0_5_4491_44_0_R" Level="5" Name="60ae66d1-1c8c-5461-5284-fe74dd01096e" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+			<CaptureStateOnSave Timeout="0">
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</CaptureStateOnSave>
+		</EventProvider>
+		<EventProvider Id="EP_ComBaseTraceLogging_-1_4_4491_45_0_0" Level="4" Name="1aff6089-e863-4d36-bdfd-3581f07440be" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.ResourceManager_72057594037927940_4_4491_46_0_0" Level="4" Name="4180c4f7-e238-5519-338f-ec214f0b49aa" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x100000000000004" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft.Windows.ResourceManager_17_4_4491_47_0_R" Level="4" Name="4180c4f7-e238-5519-338f-ec214f0b49aa" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x11" />
+			</Keywords>
+			<CaptureStateOnSave Timeout="0">
+				<Keyword Value="0x11" />
+			</CaptureStateOnSave>
+		</EventProvider>
+		<EventProvider Id="EP_Manifested/Microsoft-Windows-Kernel-Processor-Power_0_0_4491_48_0_R" Level="0" Name="0f67e49f-fe51-4e9f-b490-6f2948cc6027" NonPagedMemory="true" EventKey="true" CaptureStateOnly="true">
+			<CaptureStateOnSave Timeout="0">
+				<Keyword Value="0xFFFFFFFFFFFFFFFF" />
+			</CaptureStateOnSave>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Kernel-Processor-Power_711_4_4491_49_0_0" Level="4" Name="0f67e49f-fe51-4e9f-b490-6f2948cc6027" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x2C7" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="EP_Microsoft-Windows-Kernel-EventTracing_48_5_139_0_0_0" Level="5" Name="b675ec37-bdb6-4648-bc92-f3fdc74d3ca2" NonPagedMemory="true" EventKey="true">
+			<Keywords>
+				<Keyword Value="0x30" />
+			</Keywords>
+		</EventProvider>
+		<EventProvider Id="ETWSnap-Service" Name="524507bc-3009-5e8d-c071-00a1c641849f">
+		</EventProvider>
+		<Profile Id="GTP+AppLifecycle+CPI+BAM.Verbose.Memory" Name="GTP+AppLifecycle+CPI+BAM" Description="GTP+AppLifecycle+CPI+BAM" LoggingMode="Memory" DetailLevel="Verbose" Default="true">
+			<ProblemCategories>
+				<ProblemCategory Value="First Level Triage" />
+			</ProblemCategories>
+			<Collectors>
+				<SystemCollectorId Value="SystemCollector_General_Mobile_+_CPI">
+					<SystemProviderId Value="SystemProvider_General_Mobile_+_CPI" />
+					<HardwareCounterId Value="HardwareCounter_General_Mobile_+_CPI" />
+				</SystemCollectorId>
+				<EventCollectorId Value="EventCollector_General_Mobile_Memory">
+					<EventProviders>
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Memory_0_0_68_0_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Process_16_0_68_1_0_0" />
+					</EventProviders>
+				</EventCollectorId>
+				<EventCollectorId Value="EventCollector_XAML_PerfTrack_UTC_BAM">
+					<EventProviders>
+						<EventProviderId Value="EP_Microsoft-Windows-XAML_0_4_4434_0_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsMobile-Splash_0_4_4434_1_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-Silverlight_0_4_4434_2_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsMobile-Compositor_0_4_4434_3_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-MobileUI_0_4_4434_4_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-Shell-Chrome_0_4_4434_5_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsMobile-UIXMobile_0_4_4434_6_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.Phone.ThemeEngine_0_0_4434_7_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-AppXDeployment-Server_0_0_4434_8_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.ApplicationModel.DesktopAppx_0_0_4434_9_S_0" />
+						<EventProviderId Value="EP_bda92ae8-9f11-4d49-ba1d-a4c2abca692e_3_0_4434_10_0_0" />
+						<EventProviderId Value="EP_9474a749-a98d-4f52-9f45-5b20247e4f01_3_0_4434_11_0_0" />
+						<EventProviderId Value="EP_969e8d6b-df02-56e3-a058-ec3bef103534_0_0_4434_12_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.BackgroundActivityModerator_0_5_4434_13_0_R" />
+						<EventProviderId Value="EP_Microsoft.Windows.Shell.BackgroundActivityModerator_0_5_4434_14_0_R" />
+						<EventProviderId Value="EventProvider_PerfTrack" />
+						<EventProviderId Value="EventProvider_UTC" />
+						<EventProviderId Value="EventProvider_TelAssert" />
+					</EventProviders>
+				</EventCollectorId>
+				<EventCollectorId Value="EventCollector_GTP_Desktop_TEMP_BAM">
+					<EventProviders>
+						<EventProviderId Value="EP_Microsoft-Windows-Win32k_2531328_0_4491_0_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Diagnostics-PerfTrack_1114112_4_4491_1_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Diagnostics-PerfTrack-Counters_0_0_4491_2_0_R" />
+						<EventProviderId Value="EP_Microsoft-Windows-COMRuntime_3_0_4491_3_0_0" />
+						<EventProviderId Value="EP_Microsoft-AntiMalware-Engine_0_0_4491_4_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Prefetch_32_0_4491_5_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Immersive-Shell_2_0_4491_6_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-UserModePowerService_0_0_4491_7_0_R" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Pep_0_0_4491_8_0_R" />
+						<EventProviderId Value="EP_Microsoft-Windows-ProcessStateManager_0_0_4491_9_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-CodeIntegrity_0_0_4491_10_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-StorDiag_2_0_4491_11_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Services_0_0_4491_12_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Services-Svchost_0_0_4491_13_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-ExecManLogPublisher_0_0_4491_14_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.ProcessLifetimeManager_0_0_4491_15_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Power_164_0_4491_16_0_R" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-EventTracing_64_0_4491_17_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Shell-Launcher_0_0_4491_18_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-AppModel-Exec_0_0_4491_19_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.AppLifeCycle_0_0_4491_20_0_0" />
+						<EventProviderId Value="EP_TwinUITraceLogging_0_0_4491_21_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-AppPlatProvider_4243744_0_4491_22_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Desktop-ApplicationFrame_0_0_4491_23_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Desktop-ApplicationManager_0_0_4491_24_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.Desktop.Shell.ViewManagerInterop_0_0_4491_25_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.WindowsErrorReporting_0_0_4491_26_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.BrokerInfrastructure_0_0_4491_27_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Acpi_2_4_4491_28_0_R" />
+						<EventProviderId Value="EP_Microsoft.Windows.HangReporting_0_0_4491_29_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.FaultReporting_0_0_4491_30_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-CoreMessaging_4_5_4491_31_0_0" />
+						<EventProviderId Value="EP_Microsoft-OneCore-MinInput_0_4_4491_32_0_0" />
+						<EventProviderId Value="EP_WPR_Status_65536_0_4491_33_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.IoRate_0_4_4491_34_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Process_12288_0_4491_35_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.AppLifeCycle.UI_0_0_4491_36_0_0" />
+						<EventProviderId Value="EP_Microsoft.ClipC_35184372088832_0_4491_37_0_0" />
+						<EventProviderId Value="EP_Microsoft.ClipSp_35184372088832_0_4491_38_0_0" />
+						<EventProviderId Value="EP_Microsoft.ClipSvc_35184372088832_0_4491_39_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.LicenseManager.Telemetry_35184372088832_0_4491_40_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-CoreUIComponents_4294967295_4_4491_41_0_0" />
+						<EventProviderId Value="EP_0001376b-930d-50cd-2b29-491ca938cd54_0_0_4491_42_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-AppModel-Runtime_0_5_4491_43_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.DesktopActivityModerator_0_5_4491_44_0_R" />
+						<EventProviderId Value="EP_ComBaseTraceLogging_-1_4_4491_45_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.ResourceManager_72057594037927940_4_4491_46_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.ResourceManager_17_4_4491_47_0_R" />
+						<EventProviderId Value="EP_Manifested/Microsoft-Windows-Kernel-Processor-Power_0_0_4491_48_0_R" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Processor-Power_711_4_4491_49_0_0" />
+					</EventProviders>
+				</EventCollectorId>
+				<EventCollectorId Value="EventCollector_EventTracing">
+					<EventProviders>
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-EventTracing_48_5_139_0_0_0" />
+						<EventProviderId Value="ETWSnap-Service"/>
+					</EventProviders>
+				</EventCollectorId>
+			</Collectors>
+		</Profile>
+		<Profile Id="GTP+AppLifecycle+CPI+BAM.Verbose.File" Name="GTP+AppLifecycle+CPI+BAM" Description="GTP+AppLifecycle+CPI+BAM" LoggingMode="File" DetailLevel="Verbose">
+			<ProblemCategories>
+				<ProblemCategory Value="First Level Triage" />
+			</ProblemCategories>
+			<Collectors>
+				<SystemCollectorId Value="SystemCollector_General_Mobile_+_CPI">
+					<SystemProviderId Value="SystemProvider_General_Mobile_+_CPI" />
+					<HardwareCounterId Value="HardwareCounter_General_Mobile_+_CPI" />
+				</SystemCollectorId>
+				<EventCollectorId Value="EventCollector_General_Mobile_Memory">
+					<EventProviders>
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Memory_0_0_68_0_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Process_16_0_68_1_0_0" />
+					</EventProviders>
+				</EventCollectorId>
+				<EventCollectorId Value="EventCollector_XAML_PerfTrack_UTC_BAM">
+					<EventProviders>
+						<EventProviderId Value="EP_Microsoft-Windows-XAML_0_4_4434_0_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsMobile-Splash_0_4_4434_1_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-Silverlight_0_4_4434_2_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsMobile-Compositor_0_4_4434_3_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-MobileUI_0_4_4434_4_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-Shell-Chrome_0_4_4434_5_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsMobile-UIXMobile_0_4_4434_6_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.Phone.ThemeEngine_0_0_4434_7_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-AppXDeployment-Server_0_0_4434_8_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.ApplicationModel.DesktopAppx_0_0_4434_9_S_0" />
+						<EventProviderId Value="EP_bda92ae8-9f11-4d49-ba1d-a4c2abca692e_3_0_4434_10_0_0" />
+						<EventProviderId Value="EP_9474a749-a98d-4f52-9f45-5b20247e4f01_3_0_4434_11_0_0" />
+						<EventProviderId Value="EP_969e8d6b-df02-56e3-a058-ec3bef103534_0_0_4434_12_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.BackgroundActivityModerator_0_5_4434_13_0_R" />
+						<EventProviderId Value="EP_Microsoft.Windows.Shell.BackgroundActivityModerator_0_5_4434_14_0_R" />
+						<EventProviderId Value="EventProvider_PerfTrack" />
+						<EventProviderId Value="EventProvider_UTC" />
+						<EventProviderId Value="EventProvider_TelAssert" />
+					</EventProviders>
+				</EventCollectorId>
+				<EventCollectorId Value="EventCollector_GTP_Desktop_TEMP_BAM">
+					<EventProviders>
+						<EventProviderId Value="EP_Microsoft-Windows-Win32k_2531328_0_4491_0_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Diagnostics-PerfTrack_1114112_4_4491_1_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Diagnostics-PerfTrack-Counters_0_0_4491_2_0_R" />
+						<EventProviderId Value="EP_Microsoft-Windows-COMRuntime_3_0_4491_3_0_0" />
+						<EventProviderId Value="EP_Microsoft-AntiMalware-Engine_0_0_4491_4_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Prefetch_32_0_4491_5_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Immersive-Shell_2_0_4491_6_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-UserModePowerService_0_0_4491_7_0_R" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Pep_0_0_4491_8_0_R" />
+						<EventProviderId Value="EP_Microsoft-Windows-ProcessStateManager_0_0_4491_9_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-CodeIntegrity_0_0_4491_10_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-StorDiag_2_0_4491_11_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Services_0_0_4491_12_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Services-Svchost_0_0_4491_13_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-ExecManLogPublisher_0_0_4491_14_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.ProcessLifetimeManager_0_0_4491_15_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Power_164_0_4491_16_0_R" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-EventTracing_64_0_4491_17_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Shell-Launcher_0_0_4491_18_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-AppModel-Exec_0_0_4491_19_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.AppLifeCycle_0_0_4491_20_0_0" />
+						<EventProviderId Value="EP_TwinUITraceLogging_0_0_4491_21_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-AppPlatProvider_4243744_0_4491_22_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Desktop-ApplicationFrame_0_0_4491_23_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Desktop-ApplicationManager_0_0_4491_24_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.Desktop.Shell.ViewManagerInterop_0_0_4491_25_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.WindowsErrorReporting_0_0_4491_26_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.BrokerInfrastructure_0_0_4491_27_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Acpi_2_4_4491_28_0_R" />
+						<EventProviderId Value="EP_Microsoft.Windows.HangReporting_0_0_4491_29_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.FaultReporting_0_0_4491_30_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-CoreMessaging_4_5_4491_31_0_0" />
+						<EventProviderId Value="EP_Microsoft-OneCore-MinInput_0_4_4491_32_0_0" />
+						<EventProviderId Value="EP_WPR_Status_65536_0_4491_33_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.IoRate_0_4_4491_34_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Process_12288_0_4491_35_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.AppLifeCycle.UI_0_0_4491_36_0_0" />
+						<EventProviderId Value="EP_Microsoft.ClipC_35184372088832_0_4491_37_0_0" />
+						<EventProviderId Value="EP_Microsoft.ClipSp_35184372088832_0_4491_38_0_0" />
+						<EventProviderId Value="EP_Microsoft.ClipSvc_35184372088832_0_4491_39_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.LicenseManager.Telemetry_35184372088832_0_4491_40_0_0" />
+						<EventProviderId Value="EP_Microsoft-WindowsPhone-CoreUIComponents_4294967295_4_4491_41_0_0" />
+						<EventProviderId Value="EP_0001376b-930d-50cd-2b29-491ca938cd54_0_0_4491_42_0_0" />
+						<EventProviderId Value="EP_Microsoft-Windows-AppModel-Runtime_0_5_4491_43_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.DesktopActivityModerator_0_5_4491_44_0_R" />
+						<EventProviderId Value="EP_ComBaseTraceLogging_-1_4_4491_45_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.ResourceManager_72057594037927940_4_4491_46_0_0" />
+						<EventProviderId Value="EP_Microsoft.Windows.ResourceManager_17_4_4491_47_0_R" />
+						<EventProviderId Value="EP_Manifested/Microsoft-Windows-Kernel-Processor-Power_0_0_4491_48_0_R" />
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-Processor-Power_711_4_4491_49_0_0" />
+					</EventProviders>
+				</EventCollectorId>
+				<EventCollectorId Value="EventCollector_EventTracing">
+					<EventProviders>
+						<EventProviderId Value="EP_Microsoft-Windows-Kernel-EventTracing_48_5_139_0_0_0" />
+						<EventProviderId Value="ETWSnap-Service"/>
+					</EventProviders>
+				</EventCollectorId>
+			</Collectors>
+		</Profile>
+	</Profiles>
+	<TraceMergeProperties>
+		<TraceMergeProperty Id="TraceMerge_Default" Name="TraceMerge_Default">
+			<CustomEvents>
+				<CustomEvent Value="ImageId" />
+				<CustomEvent Value="BuildInfo" />
+				<CustomEvent Value="VolumeMapping" />
+				<CustomEvent Value="EventMetadata" />
+				<CustomEvent Value="PerfTrackMetadata" />
+				<CustomEvent Value="WinSAT" />
+			</CustomEvents>
+		</TraceMergeProperty>
+	</TraceMergeProperties>
+</WindowsPerformanceRecorder>

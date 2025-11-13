@@ -14,6 +14,7 @@ public class ScreenRecorder : IScreenRecorder
     private bool _isRecording = false;
     private int _totalFramesCaptured = 0;
     private DateTime? _startTime;
+    private string? _sessionId;
     
     // Keep a reference to the callback to prevent it from being garbage collected
     private ScreenCaptureInterop.FrameArrivedCallback? _frameCallback;
@@ -133,6 +134,11 @@ public class ScreenRecorder : IScreenRecorder
             _isRecording = true;
             _totalFramesCaptured = 0;
             _startTime = DateTime.UtcNow;
+            _sessionId = Guid.NewGuid().ToString();
+            
+            // Log ETW event for recording started
+            EtwSnapEventSource.Log.RecordingStarted(_sessionId, _options.FramesPerSecond, (int)_options.MaxBufferSizeMB);
+            
             Console.WriteLine("[ScreenRecorder] Recording started successfully");
             return true;
         }
@@ -160,6 +166,13 @@ public class ScreenRecorder : IScreenRecorder
             _isRecording = false;
 
             var duration = _startTime.HasValue ? DateTime.UtcNow - _startTime.Value : TimeSpan.Zero;
+            
+            // Log ETW event for recording stopped
+            if (_sessionId != null)
+            {
+                EtwSnapEventSource.Log.RecordingStopped(_sessionId, _totalFramesCaptured, (long)duration.TotalMilliseconds);
+            }
+            
             Console.WriteLine($"[ScreenRecorder] Recording stopped. Total frames: {_totalFramesCaptured}, Duration: {duration:mm\\:ss\\.fff}");
         }
     }
@@ -271,6 +284,18 @@ public class ScreenRecorder : IScreenRecorder
                     PixelData = frameData
                 };
 
+                // Generate the filename that will be used when this frame is saved
+                string filename = GenerateFrameFilename(frame.FrameNumber);
+                
+                // Log ETW event with the filename
+                EtwSnapEventSource.Log.FrameCaptured(
+                    frame.FrameNumber,
+                    timestamp,
+                    width,
+                    height,
+                    filename
+                );
+
                 _frameBuffer.AddFrame(frame);
 
                 // Log progress every 30 frames (approximately once per second at 30 FPS)
@@ -284,11 +309,32 @@ public class ScreenRecorder : IScreenRecorder
         catch (Exception ex)
         {
             Console.WriteLine($"[ScreenRecorder] Error in frame callback: {ex.Message}");
+            EtwSnapEventSource.Log.FrameCaptureError(_totalFramesCaptured, ex.Message);
         }
     }
 
     public void Dispose()
     {
         Stop();
+    }
+
+    /// <summary>
+    /// Generates the filename that will be used for saving a frame
+    /// This matches the filename generation logic in FrameSaver
+    /// </summary>
+    private string GenerateFrameFilename(int frameNumber)
+    {
+        // Get file extension based on image format
+        string extension = _options.ImageFormat switch
+        {
+            FrameImageFormat.PNG => ".png",
+            FrameImageFormat.JPEG => ".jpg",
+            FrameImageFormat.BMP => ".bmp",
+            _ => ".png"
+        };
+        
+        // Generate filename using session ID and frame number
+        // Format: frame_{sessionId}_{frameNumber:D6}.ext
+        return $"frame_{_sessionId}_{frameNumber:D6}{extension}";
     }
 }
