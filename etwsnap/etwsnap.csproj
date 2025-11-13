@@ -8,6 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\etwsnap.service\etwsnap.service.csproj" />
+  </ItemGroup>
+
+  <!-- Commented out C++ project reference - not needed for IPC implementation
+  <ItemGroup>
     <ProjectReference Include="..\windows.graphics.capture\windows.graphics.capture.vcxproj" />
   </ItemGroup>
 
@@ -16,5 +21,6 @@
           DestinationFolder="$(OutDir)" 
           SkipUnchangedFiles="true" />
   </Target>
+  -->
 
 </Project>

@@ -4,6 +4,7 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Project Path="etwsnap.service/etwsnap.service.csproj" Id="77d48fbb-ee88-447b-ba76-b083754de888" />
   <Project Path="etwsnap/etwsnap.csproj" />
   <Project Path="windows.graphics.capture/windows.graphics.capture.vcxproj" Id="b6f267a7-4439-4a7c-aa80-ce80ef8dbc2a" />
 </Solution>
