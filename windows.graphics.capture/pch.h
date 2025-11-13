@@ -9,6 +9,29 @@
 
 // add headers that you want to pre-compile here
 #include "framework.h"
+
+// Windows Runtime includes
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Capture.h>
+#include <winrt/Windows.Graphics.DirectX.h>
+#include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
+#include <winrt/Windows.System.h>
+
+// Direct3D includes
+#include <d3d11.h>
+#include <dxgi1_2.h>
+#include <windows.graphics.directx.direct3d11.interop.h>
+
+// Capture interop
+#include <Windows.Graphics.Capture.Interop.h>
+
+// robmikh.common helper
+#include <robmikh.common/direct3d11.interop.h>
+
+// Standard library
+#include <atomic>
+#include <memory>
+
 #include "exports.h"
 
 #endif //PCH_H
