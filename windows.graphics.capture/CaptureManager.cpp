@@ -14,6 +14,7 @@ CaptureManager::CaptureManager(HWND hwnd, int frameIntervalMs)
 {
     // Initialize Direct3D device using robmikh.common helper
     m_d3dDevice = robmikh::common::uwp::CreateD3D11Device();
+    m_d3dDevice->GetImmediateContext(m_d3dContext.put());
     auto dxgiDevice = m_d3dDevice.as<IDXGIDevice>();
     m_device = CreateDirect3DDevice(dxgiDevice.get());
 
@@ -40,6 +41,7 @@ CaptureManager::CaptureManager(HMONITOR hmon, int frameIntervalMs)
 {
     // Initialize Direct3D device using robmikh.common helper
     m_d3dDevice = robmikh::common::uwp::CreateD3D11Device();
+    m_d3dDevice->GetImmediateContext(m_d3dContext.put());
     auto dxgiDevice = m_d3dDevice.as<IDXGIDevice>();
     m_device = CreateDirect3DDevice(dxgiDevice.get());
 
@@ -142,7 +144,47 @@ void CaptureManager::OnFrameArrived(
         // Call the callback if registered
         if (m_frameCallback)
         {
-            m_frameCallback(contentSize.Width, contentSize.Height, timestamp, m_userContext);
+            // Get the surface texture from the frame
+            auto surfaceTexture = GetDXGIInterfaceFromObject<ID3D11Texture2D>(frame.Surface());
+
+            D3D11_TEXTURE2D_DESC desc{};
+            surfaceTexture->GetDesc(&desc);
+
+            // Create or recreate staging texture if needed (CPU-readable)
+            if (!m_stagingTexture || desc.Width != contentSize.Width || desc.Height != contentSize.Height)
+            {
+                D3D11_TEXTURE2D_DESC stagingDesc = desc;
+                stagingDesc.Usage = D3D11_USAGE_STAGING;
+                stagingDesc.BindFlags = 0;
+                stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+                stagingDesc.MiscFlags = 0;
+                
+                m_stagingTexture = nullptr;
+                winrt::check_hresult(m_d3dDevice->CreateTexture2D(&stagingDesc, nullptr, m_stagingTexture.put()));
+            }
+
+            // Copy frame to staging texture
+            m_d3dContext->CopyResource(m_stagingTexture.get(), surfaceTexture.get());
+
+            // Map the staging texture to get CPU-accessible memory
+            D3D11_MAPPED_SUBRESOURCE mapped{};
+            HRESULT hr = m_d3dContext->Map(m_stagingTexture.get(), 0, D3D11_MAP_READ, 0, &mapped);
+            
+            if (SUCCEEDED(hr))
+            {
+                // Call callback with pointer to pixel data
+                // Data is in BGRA8 format (4 bytes per pixel)
+                m_frameCallback(
+                    mapped.pData,
+                    contentSize.Width,
+                    contentSize.Height,
+                    mapped.RowPitch,
+                    timestamp,
+                    m_userContext);
+
+                // Unmap the texture
+                m_d3dContext->Unmap(m_stagingTexture.get(), 0);
+            }
         }
     }
 }

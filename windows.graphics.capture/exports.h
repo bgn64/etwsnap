@@ -7,8 +7,12 @@
 #endif
 
 // Callback function pointer type for frame events
-// Parameters: width, height, timestamp (milliseconds since epoch), user context
-typedef void(*FrameArrivedCallback)(int width, int height, int64_t timestamp, void* userContext);
+// Parameters: pixelData - pointer to BGRA8 pixel data (bottom-up)
+//            width, height - dimensions of the frame
+//            rowPitch - bytes per row (may be larger than width*4 due to alignment)
+//            timestamp - milliseconds since epoch
+//            userContext - user-defined context pointer
+typedef void(*FrameArrivedCallback)(const void* pixelData, int width, int height, int rowPitch, int64_t timestamp, void* userContext);
 
 extern "C" {
     // Simple arithmetic function

@@ -1,5 +1,6 @@
 #pragma once
 #include "pch.h"
+#include "exports.h"
 
 namespace winrt
 {
@@ -9,10 +10,6 @@ namespace winrt
     using namespace Windows::Graphics::DirectX;
     using namespace Windows::Graphics::DirectX::Direct3D11;
 }
-
-// Callback function pointer type for frame events
-// Parameters: width, height, timestamp (milliseconds since epoch), user context
-typedef void(*FrameArrivedCallback)(int width, int height, int64_t timestamp, void* userContext);
 
 class CaptureManager
 {
@@ -42,6 +39,8 @@ private:
 
     winrt::IDirect3DDevice m_device{ nullptr };
     winrt::com_ptr<ID3D11Device> m_d3dDevice{ nullptr };
+    winrt::com_ptr<ID3D11DeviceContext> m_d3dContext{ nullptr };
+    winrt::com_ptr<ID3D11Texture2D> m_stagingTexture{ nullptr };
 
     FrameArrivedCallback m_frameCallback{ nullptr };
     void* m_userContext{ nullptr };

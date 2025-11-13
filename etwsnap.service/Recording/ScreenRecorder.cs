@@ -226,7 +226,7 @@ public class ScreenRecorder : IScreenRecorder
         return monitors;
     }
 
-    private void OnFrameArrived(int width, int height, long timestamp, IntPtr userContext)
+    private void OnFrameArrived(IntPtr pixelData, int width, int height, int rowPitch, long timestamp, IntPtr userContext)
     {
         try
         {
@@ -239,15 +239,36 @@ public class ScreenRecorder : IScreenRecorder
 
                 _totalFramesCaptured++;
 
+                // Calculate actual data size needed
+                // We need to copy row-by-row if rowPitch > width*4 due to alignment
+                int bytesPerPixel = 4; // BGRA8
+                int rowWidth = width * bytesPerPixel;
+                
+                byte[] frameData = new byte[height * rowWidth];
+
+                // Copy pixel data from unmanaged to managed memory
+                if (rowPitch == rowWidth)
+                {
+                    // No padding - can copy entire buffer at once
+                    Marshal.Copy(pixelData, frameData, 0, frameData.Length);
+                }
+                else
+                {
+                    // Has padding - copy row by row to remove padding
+                    for (int row = 0; row < height; row++)
+                    {
+                        IntPtr sourceRow = IntPtr.Add(pixelData, row * rowPitch);
+                        Marshal.Copy(sourceRow, frameData, row * rowWidth, rowWidth);
+                    }
+                }
+
                 var frame = new FrameData
                 {
                     Width = width,
                     Height = height,
                     Timestamp = timestamp,
                     FrameNumber = _totalFramesCaptured,
-                    // TODO: In the future, we'll capture actual pixel data here
-                    // For now, we just track metadata
-                    PixelData = null
+                    PixelData = frameData
                 };
 
                 _frameBuffer.AddFrame(frame);

@@ -12,8 +12,14 @@ public static class ScreenCaptureInterop
     /// <summary>
     /// Callback delegate for frame events
     /// </summary>
+    /// <param name="pixelData">Pointer to BGRA8 pixel data</param>
+    /// <param name="width">Width of the frame in pixels</param>
+    /// <param name="height">Height of the frame in pixels</param>
+    /// <param name="rowPitch">Bytes per row (may be larger than width*4 due to alignment)</param>
+    /// <param name="timestamp">Timestamp in milliseconds since epoch</param>
+    /// <param name="userContext">User-defined context pointer</param>
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    public delegate void FrameArrivedCallback(int width, int height, long timestamp, IntPtr userContext);
+    public delegate void FrameArrivedCallback(IntPtr pixelData, int width, int height, int rowPitch, long timestamp, IntPtr userContext);
 
     /// <summary>
     /// Creates a capture manager for the specified window
