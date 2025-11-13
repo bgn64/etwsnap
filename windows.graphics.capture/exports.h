@@ -28,6 +28,12 @@ extern "C" {
     // Returns: Opaque handle to capture manager, or nullptr on failure
     CAPTURE_API void* Capture_Create(void* windowHandle, int frameIntervalMs);
 
+    // Create a capture manager for a monitor
+    // Parameters: monitorHandle - HMONITOR of the monitor to capture
+    //            frameIntervalMs - minimum milliseconds between frame callbacks
+    // Returns: Opaque handle to capture manager, or nullptr on failure
+    CAPTURE_API void* Capture_CreateForMonitor(void* monitorHandle, int frameIntervalMs);
+
     // Start capturing frames
     // Parameters: captureHandle - handle returned from Capture_Create
     // Returns: true on success, false on failure

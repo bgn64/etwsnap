@@ -80,12 +80,14 @@ public class RecordingStateManager : IRecordingStateManager
             Console.WriteLine($"[StateManager] Recording started - Session ID: {_state.CurrentSessionId}");
             
             // Start screen recording with default options
+            // By default, capture the primary monitor (both handles are zero)
             var options = new RecordingOptions
             {
                 FramesPerSecond = 30,           // 30 FPS
                 MaxBufferSizeMB = 500,          // 500 MB buffer
                 CaptureCursor = true,           // Include cursor
-                WindowHandle = IntPtr.Zero      // Capture desktop (can be customized later)
+                WindowHandle = IntPtr.Zero,     // Not capturing a specific window
+                MonitorHandle = IntPtr.Zero     // Will capture primary monitor
             };
 
             if (!_screenRecorder.Start(options))

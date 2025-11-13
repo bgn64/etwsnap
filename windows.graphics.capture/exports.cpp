@@ -38,6 +38,20 @@ extern "C" {
         }
     }
 
+    CAPTURE_API void* Capture_CreateForMonitor(void* monitorHandle, int frameIntervalMs) {
+        try {
+            if (monitorHandle == nullptr || frameIntervalMs <= 0) {
+                return nullptr;
+            }
+
+            auto manager = new CaptureManager(static_cast<HMONITOR>(monitorHandle), frameIntervalMs);
+            return static_cast<void*>(manager);
+        }
+        catch (...) {
+            return nullptr;
+        }
+    }
+
     CAPTURE_API bool Capture_Start(void* captureHandle) {
         try {
             if (captureHandle == nullptr) {

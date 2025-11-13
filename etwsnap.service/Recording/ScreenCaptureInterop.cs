@@ -25,6 +25,15 @@ public static class ScreenCaptureInterop
     public static extern IntPtr Capture_Create(IntPtr windowHandle, int frameIntervalMs);
 
     /// <summary>
+    /// Creates a capture manager for the specified monitor
+    /// </summary>
+    /// <param name="monitorHandle">Handle to the monitor to capture (HMONITOR)</param>
+    /// <param name="frameIntervalMs">Interval between frames in milliseconds</param>
+    /// <returns>Handle to the capture manager, or IntPtr.Zero on failure</returns>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr Capture_CreateForMonitor(IntPtr monitorHandle, int frameIntervalMs);
+
+    /// <summary>
     /// Starts the capture
     /// </summary>
     /// <param name="captureHandle">Handle to the capture manager</param>
@@ -96,4 +105,37 @@ public static class ScreenCaptureInterop
     /// </summary>
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+    // Monitor enumeration
+    public delegate bool MonitorEnumDelegate(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+
+    [DllImport("user32.dll")]
+    public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumDelegate lpfnEnum, IntPtr dwData);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    public struct MONITORINFOEX
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string szDevice;
+    }
+
+    public const uint MONITOR_DEFAULTTONULL = 0;
+    public const uint MONITOR_DEFAULTTOPRIMARY = 1;
+    public const uint MONITOR_DEFAULTTONEAREST = 2;
 }

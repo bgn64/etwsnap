@@ -25,8 +25,10 @@
 // Capture interop
 #include <Windows.Graphics.Capture.Interop.h>
 
-// robmikh.common helper
+// robmikh.common helpers
 #include <robmikh.common/direct3d11.interop.h>
+#include <robmikh.common/d3d11Helpers.h>
+#include <robmikh.common/capture.desktop.interop.h>
 
 // Standard library
 #include <atomic>

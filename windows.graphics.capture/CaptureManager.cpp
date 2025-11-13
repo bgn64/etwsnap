@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "CaptureManager.h"
 #include <chrono>
-#include <Windows.Graphics.Capture.Interop.h>
 
 using namespace winrt;
 using namespace winrt::Windows::Foundation;
@@ -13,29 +12,39 @@ using namespace winrt::Windows::Graphics::DirectX::Direct3D11;
 CaptureManager::CaptureManager(HWND hwnd, int frameIntervalMs)
     : m_frameIntervalMs(frameIntervalMs)
 {
-    // Initialize Direct3D device
-    winrt::com_ptr<ID3D11Device> d3dDevice;
-    D3D_FEATURE_LEVEL featureLevel;
-    winrt::check_hresult(D3D11CreateDevice(
-        nullptr,
-        D3D_DRIVER_TYPE_HARDWARE,
-        nullptr,
-        D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-        nullptr, 0,
-        D3D11_SDK_VERSION,
-        d3dDevice.put(),
-        &featureLevel,
-        nullptr));
-    
-    m_d3dDevice = d3dDevice;
-    m_device = CreateDirect3DDevice(m_d3dDevice.as<IDXGIDevice>().get());
+    // Initialize Direct3D device using robmikh.common helper
+    m_d3dDevice = robmikh::common::uwp::CreateD3D11Device();
+    auto dxgiDevice = m_d3dDevice.as<IDXGIDevice>();
+    m_device = CreateDirect3DDevice(dxgiDevice.get());
 
-    // Create capture item from HWND
-    auto interop = get_activation_factory<GraphicsCaptureItem, IGraphicsCaptureItemInterop>();
-    check_hresult(interop->CreateForWindow(
-        hwnd,
-        guid_of<ABI::Windows::Graphics::Capture::IGraphicsCaptureItem>(),
-        put_abi(m_item)));
+    // Create capture item from HWND using robmikh.common helper
+    m_item = robmikh::common::desktop::CreateCaptureItemForWindow(hwnd);
+
+    // Create frame pool
+    auto pixelFormat = DirectXPixelFormat::B8G8R8A8UIntNormalized;
+    m_framePool = Direct3D11CaptureFramePool::CreateFreeThreaded(
+        m_device,
+        pixelFormat,
+        2,
+        m_item.Size());
+
+    // Create capture session
+    m_session = m_framePool.CreateCaptureSession(m_item);
+
+    // Register frame arrived handler
+    m_framePool.FrameArrived({ this, &CaptureManager::OnFrameArrived });
+}
+
+CaptureManager::CaptureManager(HMONITOR hmon, int frameIntervalMs)
+    : m_frameIntervalMs(frameIntervalMs)
+{
+    // Initialize Direct3D device using robmikh.common helper
+    m_d3dDevice = robmikh::common::uwp::CreateD3D11Device();
+    auto dxgiDevice = m_d3dDevice.as<IDXGIDevice>();
+    m_device = CreateDirect3DDevice(dxgiDevice.get());
+
+    // Create capture item from HMONITOR using robmikh.common helper
+    m_item = robmikh::common::desktop::CreateCaptureItemForMonitor(hmon);
 
     // Create frame pool
     auto pixelFormat = DirectXPixelFormat::B8G8R8A8UIntNormalized;

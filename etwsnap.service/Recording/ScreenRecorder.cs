@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace ETWSnap.Service.Recording;
 
 /// <summary>
@@ -81,21 +83,27 @@ public class ScreenRecorder : IScreenRecorder
                 _frameBuffer.Clear();
             }
 
-            // Determine window handle to capture
-            IntPtr windowHandle = _options.WindowHandle;
-            if (windowHandle == IntPtr.Zero)
+            // Determine what to capture: monitor takes precedence over window
+            if (_options.MonitorHandle != IntPtr.Zero)
             {
-                // Capture the foreground window by default
-                windowHandle = ScreenCaptureInterop.GetForegroundWindow();
-                Console.WriteLine("[ScreenRecorder] Capturing foreground window");
+                // Capture specified monitor
+                Console.WriteLine($"[ScreenRecorder] Capturing monitor handle: 0x{_options.MonitorHandle:X}");
+                _captureHandle = ScreenCaptureInterop.Capture_CreateForMonitor(_options.MonitorHandle, _options.FrameIntervalMs);
+            }
+            else if (_options.WindowHandle != IntPtr.Zero)
+            {
+                // Capture specified window
+                Console.WriteLine($"[ScreenRecorder] Capturing window handle: 0x{_options.WindowHandle:X}");
+                _captureHandle = ScreenCaptureInterop.Capture_Create(_options.WindowHandle, _options.FrameIntervalMs);
             }
             else
             {
-                Console.WriteLine($"[ScreenRecorder] Capturing window handle: 0x{windowHandle:X}");
+                // Capture primary monitor by default
+                var primaryMonitor = GetPrimaryMonitor();
+                Console.WriteLine($"[ScreenRecorder] Capturing primary monitor: 0x{primaryMonitor:X}");
+                _captureHandle = ScreenCaptureInterop.Capture_CreateForMonitor(primaryMonitor, _options.FrameIntervalMs);
             }
 
-            // Create the capture manager
-            _captureHandle = ScreenCaptureInterop.Capture_Create(windowHandle, _options.FrameIntervalMs);
             if (_captureHandle == IntPtr.Zero)
             {
                 Console.WriteLine("[ScreenRecorder] Failed to create capture manager");
@@ -169,6 +177,53 @@ public class ScreenRecorder : IScreenRecorder
                 Duration = _startTime.HasValue ? DateTime.UtcNow - _startTime.Value : null
             };
         }
+    }
+
+    private IntPtr GetPrimaryMonitor()
+    {
+        var monitors = new List<IntPtr>();
+        ScreenCaptureInterop.MonitorEnumDelegate callback = (IntPtr hMonitor, IntPtr hdcMonitor, ref ScreenCaptureInterop.RECT lprcMonitor, IntPtr dwData) =>
+        {
+            var info = new ScreenCaptureInterop.MONITORINFOEX();
+            info.cbSize = Marshal.SizeOf(typeof(ScreenCaptureInterop.MONITORINFOEX));
+            if (ScreenCaptureInterop.GetMonitorInfo(hMonitor, ref info))
+            {
+                // Primary monitor has dwFlags = 1
+                if (info.dwFlags == 1)
+                {
+                    monitors.Insert(0, hMonitor);
+                }
+                else
+                {
+                    monitors.Add(hMonitor);
+                }
+            }
+            return true;
+        };
+        
+        ScreenCaptureInterop.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
+        return monitors.Count > 0 ? monitors[0] : IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// Gets a list of all available monitor handles
+    /// </summary>
+    public static List<(IntPtr Handle, string DeviceName, bool IsPrimary)> EnumerateMonitors()
+    {
+        var monitors = new List<(IntPtr, string, bool)>();
+        ScreenCaptureInterop.MonitorEnumDelegate callback = (IntPtr hMonitor, IntPtr hdcMonitor, ref ScreenCaptureInterop.RECT lprcMonitor, IntPtr dwData) =>
+        {
+            var info = new ScreenCaptureInterop.MONITORINFOEX();
+            info.cbSize = Marshal.SizeOf(typeof(ScreenCaptureInterop.MONITORINFOEX));
+            if (ScreenCaptureInterop.GetMonitorInfo(hMonitor, ref info))
+            {
+                monitors.Add((hMonitor, info.szDevice, info.dwFlags == 1));
+            }
+            return true;
+        };
+        
+        ScreenCaptureInterop.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
+        return monitors;
     }
 
     private void OnFrameArrived(int width, int height, long timestamp, IntPtr userContext)

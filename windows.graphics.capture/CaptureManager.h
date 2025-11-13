@@ -18,6 +18,7 @@ class CaptureManager
 {
 public:
     CaptureManager(HWND hwnd, int frameIntervalMs);
+    CaptureManager(HMONITOR hmon, int frameIntervalMs);
     ~CaptureManager();
 
     void StartCapture();

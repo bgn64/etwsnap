@@ -21,9 +21,15 @@ public class RecordingOptions
     public bool CaptureCursor { get; set; } = true;
 
     /// <summary>
-    /// Window handle to capture (IntPtr.Zero means capture the desktop)
+    /// Window handle to capture (IntPtr.Zero means capture monitor or desktop)
     /// </summary>
     public IntPtr WindowHandle { get; set; } = IntPtr.Zero;
+
+    /// <summary>
+    /// Monitor handle to capture (IntPtr.Zero means capture window or desktop)
+    /// If both WindowHandle and MonitorHandle are zero, captures the primary monitor
+    /// </summary>
+    public IntPtr MonitorHandle { get; set; } = IntPtr.Zero;
 
     /// <summary>
     /// Gets the frame interval in milliseconds based on FPS
