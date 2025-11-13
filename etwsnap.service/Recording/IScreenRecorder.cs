@@ -32,6 +32,16 @@ public class RecordingOptions
     public IntPtr MonitorHandle { get; set; } = IntPtr.Zero;
 
     /// <summary>
+    /// Image format to use when saving frames (default: PNG)
+    /// </summary>
+    public FrameImageFormat ImageFormat { get; set; } = FrameImageFormat.PNG;
+
+    /// <summary>
+    /// JPEG quality (1-100), only used when ImageFormat is JPEG (default: 90)
+    /// </summary>
+    public long JpegQuality { get; set; } = 90;
+
+    /// <summary>
     /// Gets the frame interval in milliseconds based on FPS
     /// </summary>
     public int FrameIntervalMs => 1000 / FramesPerSecond;

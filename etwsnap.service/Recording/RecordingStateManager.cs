@@ -125,14 +125,47 @@ public class RecordingStateManager : IRecordingStateManager
             Console.WriteLine($"[StateManager] Captured {stats.TotalFramesCaptured} frames");
             Console.WriteLine($"[StateManager] Buffer contains {stats.BufferStats.FrameCount} frames ({stats.BufferStats.CurrentSizeInBytes / (1024 * 1024)} MB)");
 
-            // TODO: Save frames to disk at the specified file path
+            // Save frames to disk
             if (!string.IsNullOrEmpty(filePath))
             {
-                Console.WriteLine($"[StateManager] Would save recording to: {filePath}");
-                // Future implementation:
-                // - Retrieve frames from _screenRecorder.FrameBuffer.GetAllFrames()
-                // - Encode frames to video format (e.g., MP4, AVI)
-                // - Write to filePath
+                Console.WriteLine($"[StateManager] Saving recording to: {filePath}");
+                
+                // Retrieve frames from buffer
+                var frames = _screenRecorder.FrameBuffer.GetAllFrames();
+                
+                if (frames.Count > 0)
+                {
+                    // Determine output directory
+                    // If filePath is a directory, use it directly
+                    // If it's a file path, use its directory
+                    string outputDirectory;
+                    if (Directory.Exists(filePath))
+                    {
+                        outputDirectory = filePath;
+                    }
+                    else
+                    {
+                        // Extract directory from file path, or use current directory
+                        outputDirectory = Path.GetDirectoryName(filePath) ?? Environment.CurrentDirectory;
+                    }
+                    
+                    // Create save options
+                    var saveOptions = new FrameSaveOptions
+                    {
+                        OutputDirectory = outputDirectory,
+                        BaseFilename = $"frame_{sessionId}",
+                        Format = _screenRecorder.Options.ImageFormat,
+                        JpegQuality = _screenRecorder.Options.JpegQuality
+                    };
+                    
+                    // Save frames
+                    int savedCount = FrameSaver.SaveFrames(frames, saveOptions);
+                    Console.WriteLine($"[StateManager] Successfully saved {savedCount} frames to: {outputDirectory}");
+                }
+                else
+                {
+                    Console.WriteLine($"[StateManager] No frames available to save");
+                }
             }
 
             // Reset state
