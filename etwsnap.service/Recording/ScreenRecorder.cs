@@ -1,0 +1,218 @@
+namespace ETWSnap.Service.Recording;
+
+/// <summary>
+/// Screen recorder implementation using Windows.Graphics.Capture
+/// </summary>
+public class ScreenRecorder : IScreenRecorder
+{
+    private readonly object _lockObj = new();
+    private IntPtr _captureHandle = IntPtr.Zero;
+    private FrameBuffer _frameBuffer;
+    private RecordingOptions _options;
+    private bool _isRecording = false;
+    private int _totalFramesCaptured = 0;
+    private DateTime? _startTime;
+    
+    // Keep a reference to the callback to prevent it from being garbage collected
+    private ScreenCaptureInterop.FrameArrivedCallback? _frameCallback;
+
+    public ScreenRecorder()
+    {
+        _options = new RecordingOptions();
+        _frameBuffer = new FrameBuffer(_options.MaxBufferSizeBytes);
+    }
+
+    public bool IsRecording
+    {
+        get
+        {
+            lock (_lockObj)
+            {
+                return _isRecording;
+            }
+        }
+    }
+
+    public RecordingOptions Options
+    {
+        get
+        {
+            lock (_lockObj)
+            {
+                return _options;
+            }
+        }
+    }
+
+    public FrameBuffer FrameBuffer
+    {
+        get
+        {
+            lock (_lockObj)
+            {
+                return _frameBuffer;
+            }
+        }
+    }
+
+    public bool Start(RecordingOptions? options = null)
+    {
+        lock (_lockObj)
+        {
+            if (_isRecording)
+            {
+                Console.WriteLine("[ScreenRecorder] Already recording");
+                return false;
+            }
+
+            // Update options if provided
+            if (options != null)
+            {
+                _options = options;
+                // Recreate buffer with new size if changed
+                if (_frameBuffer.MaxSizeInBytes != _options.MaxBufferSizeBytes)
+                {
+                    _frameBuffer = new FrameBuffer(_options.MaxBufferSizeBytes);
+                }
+            }
+            else
+            {
+                // Clear existing buffer for new recording
+                _frameBuffer.Clear();
+            }
+
+            // Determine window handle to capture
+            IntPtr windowHandle = _options.WindowHandle;
+            if (windowHandle == IntPtr.Zero)
+            {
+                // Capture the foreground window by default
+                windowHandle = ScreenCaptureInterop.GetForegroundWindow();
+                Console.WriteLine("[ScreenRecorder] Capturing foreground window");
+            }
+            else
+            {
+                Console.WriteLine($"[ScreenRecorder] Capturing window handle: 0x{windowHandle:X}");
+            }
+
+            // Create the capture manager
+            _captureHandle = ScreenCaptureInterop.Capture_Create(windowHandle, _options.FrameIntervalMs);
+            if (_captureHandle == IntPtr.Zero)
+            {
+                Console.WriteLine("[ScreenRecorder] Failed to create capture manager");
+                return false;
+            }
+
+            Console.WriteLine($"[ScreenRecorder] Capture created successfully (FPS: {_options.FramesPerSecond}, Buffer: {_options.MaxBufferSizeMB}MB)");
+
+            // Set up the frame callback
+            _frameCallback = OnFrameArrived;
+            ScreenCaptureInterop.Capture_SetFrameCallback(_captureHandle, _frameCallback, IntPtr.Zero);
+
+            // Configure cursor capture
+            ScreenCaptureInterop.Capture_SetCursorEnabled(_captureHandle, _options.CaptureCursor);
+            Console.WriteLine($"[ScreenRecorder] Cursor capture: {_options.CaptureCursor}");
+
+            // Start capturing
+            if (!ScreenCaptureInterop.Capture_Start(_captureHandle))
+            {
+                Console.WriteLine("[ScreenRecorder] Failed to start capture");
+                ScreenCaptureInterop.Capture_Destroy(_captureHandle);
+                _captureHandle = IntPtr.Zero;
+                _frameCallback = null;
+                return false;
+            }
+
+            _isRecording = true;
+            _totalFramesCaptured = 0;
+            _startTime = DateTime.UtcNow;
+            Console.WriteLine("[ScreenRecorder] Recording started successfully");
+            return true;
+        }
+    }
+
+    public void Stop()
+    {
+        lock (_lockObj)
+        {
+            if (!_isRecording)
+            {
+                return;
+            }
+
+            Console.WriteLine("[ScreenRecorder] Stopping recording...");
+
+            if (_captureHandle != IntPtr.Zero)
+            {
+                ScreenCaptureInterop.Capture_Stop(_captureHandle);
+                ScreenCaptureInterop.Capture_Destroy(_captureHandle);
+                _captureHandle = IntPtr.Zero;
+            }
+
+            _frameCallback = null;
+            _isRecording = false;
+
+            var duration = _startTime.HasValue ? DateTime.UtcNow - _startTime.Value : TimeSpan.Zero;
+            Console.WriteLine($"[ScreenRecorder] Recording stopped. Total frames: {_totalFramesCaptured}, Duration: {duration:mm\\:ss\\.fff}");
+        }
+    }
+
+    public RecordingStats GetStats()
+    {
+        lock (_lockObj)
+        {
+            return new RecordingStats
+            {
+                IsRecording = _isRecording,
+                TotalFramesCaptured = _totalFramesCaptured,
+                BufferStats = _frameBuffer.GetStats(),
+                StartTime = _startTime,
+                Duration = _startTime.HasValue ? DateTime.UtcNow - _startTime.Value : null
+            };
+        }
+    }
+
+    private void OnFrameArrived(int width, int height, long timestamp, IntPtr userContext)
+    {
+        try
+        {
+            lock (_lockObj)
+            {
+                if (!_isRecording)
+                {
+                    return;
+                }
+
+                _totalFramesCaptured++;
+
+                var frame = new FrameData
+                {
+                    Width = width,
+                    Height = height,
+                    Timestamp = timestamp,
+                    FrameNumber = _totalFramesCaptured,
+                    // TODO: In the future, we'll capture actual pixel data here
+                    // For now, we just track metadata
+                    PixelData = null
+                };
+
+                _frameBuffer.AddFrame(frame);
+
+                // Log progress every 30 frames (approximately once per second at 30 FPS)
+                if (_totalFramesCaptured % 30 == 0)
+                {
+                    var stats = _frameBuffer.GetStats();
+                    Console.WriteLine($"[ScreenRecorder] Frame {_totalFramesCaptured}: {width}x{height}, Buffer: {stats.FrameCount} frames ({stats.CurrentSizeInBytes / (1024 * 1024)}MB / {stats.MaxSizeInBytes / (1024 * 1024)}MB)");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ScreenRecorder] Error in frame callback: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        Stop();
+    }
+}

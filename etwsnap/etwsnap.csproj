@@ -11,16 +11,4 @@
     <ProjectReference Include="..\etwsnap.service\etwsnap.service.csproj" />
   </ItemGroup>
 
-  <!-- Commented out C++ project reference - not needed for IPC implementation
-  <ItemGroup>
-    <ProjectReference Include="..\windows.graphics.capture\windows.graphics.capture.vcxproj" />
-  </ItemGroup>
-
-  <Target Name="CopyCppDll" AfterTargets="Build">
-    <Copy SourceFiles="..\x64\$(Configuration)\windows.graphics.capture.dll" 
-          DestinationFolder="$(OutDir)" 
-          SkipUnchangedFiles="true" />
-  </Target>
-  -->
-
 </Project>

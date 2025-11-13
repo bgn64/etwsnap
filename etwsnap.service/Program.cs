@@ -9,7 +9,8 @@ class Program
         Console.WriteLine("ETWSnap Service starting...");
 
         // Initialize components
-        var stateManager = new RecordingStateManager();
+        var screenRecorder = new ScreenRecorder();
+        var stateManager = new RecordingStateManager(screenRecorder);
         var commandHandler = new CommandHandler(stateManager);
         using var pipeServer = new NamedPipeServer();
 
@@ -41,6 +42,11 @@ class Program
         {
             Console.Error.WriteLine($"Service error: {ex.Message}");
             Environment.Exit(1);
+        }
+        finally
+        {
+            // Clean up screen recorder
+            screenRecorder.Dispose();
         }
     }
 }
