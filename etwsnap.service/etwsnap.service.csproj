@@ -12,15 +12,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\windows.graphics.capture\windows.graphics.capture.vcxproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\windows.graphics.capture\windows.graphics.capture.vcxproj" />
+    <ProjectReference Include="..\etwsnap.service.native\etwsnap.service.native.vcxproj" />
   </ItemGroup>
 
   <Target Name="CopyCppDll" AfterTargets="Build">
-    <Copy SourceFiles="..\x64\$(Configuration)\windows.graphics.capture.dll" 
+    <Copy SourceFiles="..\x64\$(Configuration)\etwsnap.service.native.dll" 
           DestinationFolder="$(OutDir)" 
           SkipUnchangedFiles="true" />
   </Target>

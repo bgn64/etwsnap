@@ -11,4 +11,10 @@
     <ProjectReference Include="..\etwsnap.service\etwsnap.service.csproj" />
   </ItemGroup>
 
+  <Target Name="CopyCppDll" AfterTargets="Build">
+    <Copy SourceFiles="..\x64\$(Configuration)\etwsnap.service.native.dll" 
+          DestinationFolder="$(OutDir)" 
+          SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

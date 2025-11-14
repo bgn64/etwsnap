@@ -1,5 +1,4 @@
-<?xml version="1.0" standalone='yes'?>
-
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <WindowsPerformanceRecorder Author="COSINE Fundamentals Developer Insights Data on Demand for Developers Team" Version="1">
 	<Profiles>
 		<SystemCollector Id="SystemCollector_General_Mobile_+_CPI" Name="DiagTrack_AlternativeTrace_KernelLogger" HostGuestCorrelation="true">
@@ -430,8 +429,6 @@
 				<Keyword Value="0x30" />
 			</Keywords>
 		</EventProvider>
-		<EventProvider Id="ETWSnap-Service" Name="524507bc-3009-5e8d-c071-00a1c641849f">
-		</EventProvider>
 		<Profile Id="GTP+AppLifecycle+CPI+BAM.Verbose.Memory" Name="GTP+AppLifecycle+CPI+BAM" Description="GTP+AppLifecycle+CPI+BAM" LoggingMode="Memory" DetailLevel="Verbose" Default="true">
 			<ProblemCategories>
 				<ProblemCategory Value="First Level Triage" />
@@ -526,7 +523,6 @@
 				<EventCollectorId Value="EventCollector_EventTracing">
 					<EventProviders>
 						<EventProviderId Value="EP_Microsoft-Windows-Kernel-EventTracing_48_5_139_0_0_0" />
-						<EventProviderId Value="ETWSnap-Service"/>
 					</EventProviders>
 				</EventCollectorId>
 			</Collectors>
@@ -625,7 +621,6 @@
 				<EventCollectorId Value="EventCollector_EventTracing">
 					<EventProviders>
 						<EventProviderId Value="EP_Microsoft-Windows-Kernel-EventTracing_48_5_139_0_0_0" />
-						<EventProviderId Value="ETWSnap-Service"/>
 					</EventProviders>
 				</EventCollectorId>
 			</Collectors>

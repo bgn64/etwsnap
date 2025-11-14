@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef WINDOWSGRAPHICSCAPTURE_EXPORTS
+#ifdef ETWSNAPSERVICENATIVE_EXPORTS
 #define CAPTURE_API __declspec(dllexport)
 #else
 #define CAPTURE_API __declspec(dllimport)

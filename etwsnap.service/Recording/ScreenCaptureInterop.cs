@@ -3,11 +3,11 @@ using System.Runtime.InteropServices;
 namespace ETWSnap.Service.Recording;
 
 /// <summary>
-/// P/Invoke interop layer for the windows.graphics.capture.dll
+/// P/Invoke interop layer for the etwsnap.service.native.dll
 /// </summary>
 public static class ScreenCaptureInterop
 {
-    private const string DllName = "windows.graphics.capture.dll";
+    private const string DllName = "etwsnap.service.native.dll";
 
     /// <summary>
     /// Structure representing a captured frame
