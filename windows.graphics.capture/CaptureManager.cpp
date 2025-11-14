@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "CaptureManager.h"
+#include "CircularFrameBuffer.h"
 #include <chrono>
 
 using namespace winrt;
@@ -9,8 +10,9 @@ using namespace winrt::Windows::Graphics::Capture;
 using namespace winrt::Windows::Graphics::DirectX;
 using namespace winrt::Windows::Graphics::DirectX::Direct3D11;
 
-CaptureManager::CaptureManager(HWND hwnd, int frameIntervalMs)
+CaptureManager::CaptureManager(HWND hwnd, int frameIntervalMs, size_t maxFrames)
     : m_frameIntervalMs(frameIntervalMs)
+    , m_frameBuffer(maxFrames)
 {
     // Initialize Direct3D device using robmikh.common helper
     m_d3dDevice = robmikh::common::uwp::CreateD3D11Device();
@@ -36,8 +38,9 @@ CaptureManager::CaptureManager(HWND hwnd, int frameIntervalMs)
     m_framePool.FrameArrived({ this, &CaptureManager::OnFrameArrived });
 }
 
-CaptureManager::CaptureManager(HMONITOR hmon, int frameIntervalMs)
+CaptureManager::CaptureManager(HMONITOR hmon, int frameIntervalMs, size_t maxFrames)
     : m_frameIntervalMs(frameIntervalMs)
+    , m_frameBuffer(maxFrames)
 {
     // Initialize Direct3D device using robmikh.common helper
     m_d3dDevice = robmikh::common::uwp::CreateD3D11Device();
@@ -95,10 +98,9 @@ void CaptureManager::StopCapture()
     }
 }
 
-void CaptureManager::SetFrameCallback(FrameArrivedCallback callback, void* userContext)
+std::vector<CapturedFrame> CaptureManager::GetFrames()
 {
-    m_frameCallback = callback;
-    m_userContext = userContext;
+    return m_frameBuffer.GetAllFrames();
 }
 
 bool CaptureManager::IsCursorEnabled() const
@@ -133,6 +135,7 @@ void CaptureManager::OnFrameArrived(
     if (timeSinceLastFrame >= m_frameIntervalMs)
     {
         m_lastFrameTime = now;
+        m_frameNumber++;
 
         // Get frame info
         auto contentSize = frame.ContentSize();
@@ -141,51 +144,28 @@ void CaptureManager::OnFrameArrived(
         auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
 
-        // Call the callback if registered
-        if (m_frameCallback)
-        {
-            // Get the surface texture from the frame
-            auto surfaceTexture = GetDXGIInterfaceFromObject<ID3D11Texture2D>(frame.Surface());
+        // TODO: Log ETW event here for frame captured (TraceLogging)
 
-            D3D11_TEXTURE2D_DESC desc{};
-            surfaceTexture->GetDesc(&desc);
+        // Get the surface texture from the frame
+        auto surfaceTexture = GetDXGIInterfaceFromObject<ID3D11Texture2D>(frame.Surface());
 
-            // Create or recreate staging texture if needed (CPU-readable)
-            if (!m_stagingTexture || desc.Width != contentSize.Width || desc.Height != contentSize.Height)
-            {
-                D3D11_TEXTURE2D_DESC stagingDesc = desc;
-                stagingDesc.Usage = D3D11_USAGE_STAGING;
-                stagingDesc.BindFlags = 0;
-                stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-                stagingDesc.MiscFlags = 0;
-                
-                m_stagingTexture = nullptr;
-                winrt::check_hresult(m_d3dDevice->CreateTexture2D(&stagingDesc, nullptr, m_stagingTexture.put()));
-            }
+        D3D11_TEXTURE2D_DESC desc{};
+        surfaceTexture->GetDesc(&desc);
 
-            // Copy frame to staging texture
-            m_d3dContext->CopyResource(m_stagingTexture.get(), surfaceTexture.get());
+        // Create a copy of the texture (GPU-side only)
+        winrt::com_ptr<ID3D11Texture2D> frameTexture;
+        winrt::check_hresult(m_d3dDevice->CreateTexture2D(&desc, nullptr, frameTexture.put()));
 
-            // Map the staging texture to get CPU-accessible memory
-            D3D11_MAPPED_SUBRESOURCE mapped{};
-            HRESULT hr = m_d3dContext->Map(m_stagingTexture.get(), 0, D3D11_MAP_READ, 0, &mapped);
-            
-            if (SUCCEEDED(hr))
-            {
-                // Call callback with pointer to pixel data
-                // Data is in BGRA8 format (4 bytes per pixel)
-                m_frameCallback(
-                    mapped.pData,
-                    contentSize.Width,
-                    contentSize.Height,
-                    mapped.RowPitch,
-                    timestamp,
-                    m_userContext);
+        // Copy frame texture (fast GPU-to-GPU copy)
+        m_d3dContext->CopyResource(frameTexture.get(), surfaceTexture.get());
 
-                // Unmap the texture
-                m_d3dContext->Unmap(m_stagingTexture.get(), 0);
-            }
-        }
+        // Store in circular buffer
+        m_frameBuffer.AddFrame(
+            frameTexture,
+            contentSize.Width,
+            contentSize.Height,
+            timestamp,
+            m_frameNumber);
     }
 }
 

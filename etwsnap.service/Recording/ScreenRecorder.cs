@@ -9,20 +9,14 @@ public class ScreenRecorder : IScreenRecorder
 {
     private readonly object _lockObj = new();
     private IntPtr _captureHandle = IntPtr.Zero;
-    private FrameBuffer _frameBuffer;
     private RecordingOptions _options;
     private bool _isRecording = false;
-    private int _totalFramesCaptured = 0;
     private DateTime? _startTime;
     private string? _sessionId;
-    
-    // Keep a reference to the callback to prevent it from being garbage collected
-    private ScreenCaptureInterop.FrameArrivedCallback? _frameCallback;
 
     public ScreenRecorder()
     {
         _options = new RecordingOptions();
-        _frameBuffer = new FrameBuffer(_options.MaxBufferSizeBytes);
     }
 
     public bool IsRecording
@@ -47,17 +41,6 @@ public class ScreenRecorder : IScreenRecorder
         }
     }
 
-    public FrameBuffer FrameBuffer
-    {
-        get
-        {
-            lock (_lockObj)
-            {
-                return _frameBuffer;
-            }
-        }
-    }
-
     public bool Start(RecordingOptions? options = null)
     {
         lock (_lockObj)
@@ -72,37 +55,32 @@ public class ScreenRecorder : IScreenRecorder
             if (options != null)
             {
                 _options = options;
-                // Recreate buffer with new size if changed
-                if (_frameBuffer.MaxSizeInBytes != _options.MaxBufferSizeBytes)
-                {
-                    _frameBuffer = new FrameBuffer(_options.MaxBufferSizeBytes);
-                }
             }
-            else
-            {
-                // Clear existing buffer for new recording
-                _frameBuffer.Clear();
-            }
+
+            // Calculate max frames based on buffer size and estimated frame size
+            // Assume average of 1920x1080 at 4 bytes per pixel (~8MB per frame)
+            int estimatedFrameSize = 1920 * 1080 * 4;
+            int maxFrames = Math.Max(10, (int)(_options.MaxBufferSizeBytes / estimatedFrameSize));
 
             // Determine what to capture: monitor takes precedence over window
             if (_options.MonitorHandle != IntPtr.Zero)
             {
                 // Capture specified monitor
                 Console.WriteLine($"[ScreenRecorder] Capturing monitor handle: 0x{_options.MonitorHandle:X}");
-                _captureHandle = ScreenCaptureInterop.Capture_CreateForMonitor(_options.MonitorHandle, _options.FrameIntervalMs);
+                _captureHandle = ScreenCaptureInterop.Capture_CreateForMonitor(_options.MonitorHandle, _options.FrameIntervalMs, maxFrames);
             }
             else if (_options.WindowHandle != IntPtr.Zero)
             {
                 // Capture specified window
                 Console.WriteLine($"[ScreenRecorder] Capturing window handle: 0x{_options.WindowHandle:X}");
-                _captureHandle = ScreenCaptureInterop.Capture_Create(_options.WindowHandle, _options.FrameIntervalMs);
+                _captureHandle = ScreenCaptureInterop.Capture_Create(_options.WindowHandle, _options.FrameIntervalMs, maxFrames);
             }
             else
             {
                 // Capture primary monitor by default
                 var primaryMonitor = GetPrimaryMonitor();
                 Console.WriteLine($"[ScreenRecorder] Capturing primary monitor: 0x{primaryMonitor:X}");
-                _captureHandle = ScreenCaptureInterop.Capture_CreateForMonitor(primaryMonitor, _options.FrameIntervalMs);
+                _captureHandle = ScreenCaptureInterop.Capture_CreateForMonitor(primaryMonitor, _options.FrameIntervalMs, maxFrames);
             }
 
             if (_captureHandle == IntPtr.Zero)
@@ -111,11 +89,7 @@ public class ScreenRecorder : IScreenRecorder
                 return false;
             }
 
-            Console.WriteLine($"[ScreenRecorder] Capture created successfully (FPS: {_options.FramesPerSecond}, Buffer: {_options.MaxBufferSizeMB}MB)");
-
-            // Set up the frame callback
-            _frameCallback = OnFrameArrived;
-            ScreenCaptureInterop.Capture_SetFrameCallback(_captureHandle, _frameCallback, IntPtr.Zero);
+            Console.WriteLine($"[ScreenRecorder] Capture created successfully (FPS: {_options.FramesPerSecond}, Buffer: {maxFrames} frames)");
 
             // Configure cursor capture
             ScreenCaptureInterop.Capture_SetCursorEnabled(_captureHandle, _options.CaptureCursor);
@@ -127,12 +101,10 @@ public class ScreenRecorder : IScreenRecorder
                 Console.WriteLine("[ScreenRecorder] Failed to start capture");
                 ScreenCaptureInterop.Capture_Destroy(_captureHandle);
                 _captureHandle = IntPtr.Zero;
-                _frameCallback = null;
                 return false;
             }
 
             _isRecording = true;
-            _totalFramesCaptured = 0;
             _startTime = DateTime.UtcNow;
             _sessionId = Guid.NewGuid().ToString();
             
@@ -144,13 +116,15 @@ public class ScreenRecorder : IScreenRecorder
         }
     }
 
-    public void Stop()
+    public List<FrameData> Stop()
     {
         lock (_lockObj)
         {
+            var frames = new List<FrameData>();
+
             if (!_isRecording)
             {
-                return;
+                return frames;
             }
 
             Console.WriteLine("[ScreenRecorder] Stopping recording...");
@@ -158,11 +132,45 @@ public class ScreenRecorder : IScreenRecorder
             if (_captureHandle != IntPtr.Zero)
             {
                 ScreenCaptureInterop.Capture_Stop(_captureHandle);
+
+                // Retrieve frames from native buffer
+                if (ScreenCaptureInterop.Capture_GetFrames(_captureHandle, out IntPtr framesPtr, out int frameCount))
+                {
+                    Console.WriteLine($"[ScreenRecorder] Retrieved {frameCount} frames from native buffer");
+
+                    if (frameCount > 0 && framesPtr != IntPtr.Zero)
+                    {
+                        int structSize = Marshal.SizeOf<ScreenCaptureInterop.FrameData>();
+
+                        for (int i = 0; i < frameCount; i++)
+                        {
+                            IntPtr framePtr = IntPtr.Add(framesPtr, i * structSize);
+                            var nativeFrame = Marshal.PtrToStructure<ScreenCaptureInterop.FrameData>(framePtr);
+
+                            // Copy pixel data from unmanaged to managed memory
+                            int dataSize = nativeFrame.Height * nativeFrame.RowPitch;
+                            byte[] pixelData = new byte[dataSize];
+                            Marshal.Copy(nativeFrame.PixelData, pixelData, 0, dataSize);
+
+                            frames.Add(new FrameData
+                            {
+                                Width = nativeFrame.Width,
+                                Height = nativeFrame.Height,
+                                Timestamp = nativeFrame.Timestamp,
+                                FrameNumber = nativeFrame.FrameNumber,
+                                PixelData = pixelData
+                            });
+                        }
+
+                        // Free native memory
+                        ScreenCaptureInterop.Capture_FreeFrames(framesPtr, frameCount);
+                    }
+                }
+
                 ScreenCaptureInterop.Capture_Destroy(_captureHandle);
                 _captureHandle = IntPtr.Zero;
             }
 
-            _frameCallback = null;
             _isRecording = false;
 
             var duration = _startTime.HasValue ? DateTime.UtcNow - _startTime.Value : TimeSpan.Zero;
@@ -170,10 +178,11 @@ public class ScreenRecorder : IScreenRecorder
             // Log ETW event for recording stopped
             if (_sessionId != null)
             {
-                EtwSnapEventSource.Log.RecordingStopped(_sessionId, _totalFramesCaptured, (long)duration.TotalMilliseconds);
+                EtwSnapEventSource.Log.RecordingStopped(_sessionId, frames.Count, (long)duration.TotalMilliseconds);
             }
             
-            Console.WriteLine($"[ScreenRecorder] Recording stopped. Total frames: {_totalFramesCaptured}, Duration: {duration:mm\\:ss\\.fff}");
+            Console.WriteLine($"[ScreenRecorder] Recording stopped. Total frames: {frames.Count}, Duration: {duration:mm\\:ss\\.fff}");
+            return frames;
         }
     }
 
@@ -184,8 +193,7 @@ public class ScreenRecorder : IScreenRecorder
             return new RecordingStats
             {
                 IsRecording = _isRecording,
-                TotalFramesCaptured = _totalFramesCaptured,
-                BufferStats = _frameBuffer.GetStats(),
+                TotalFramesCaptured = 0, // Frame count only available after stopping
                 StartTime = _startTime,
                 Duration = _startTime.HasValue ? DateTime.UtcNow - _startTime.Value : null
             };
@@ -239,102 +247,8 @@ public class ScreenRecorder : IScreenRecorder
         return monitors;
     }
 
-    private void OnFrameArrived(IntPtr pixelData, int width, int height, int rowPitch, long timestamp, IntPtr userContext)
-    {
-        try
-        {
-            lock (_lockObj)
-            {
-                if (!_isRecording)
-                {
-                    return;
-                }
-
-                _totalFramesCaptured++;
-
-                // Calculate actual data size needed
-                // We need to copy row-by-row if rowPitch > width*4 due to alignment
-                int bytesPerPixel = 4; // BGRA8
-                int rowWidth = width * bytesPerPixel;
-                
-                byte[] frameData = new byte[height * rowWidth];
-
-                // Copy pixel data from unmanaged to managed memory
-                if (rowPitch == rowWidth)
-                {
-                    // No padding - can copy entire buffer at once
-                    Marshal.Copy(pixelData, frameData, 0, frameData.Length);
-                }
-                else
-                {
-                    // Has padding - copy row by row to remove padding
-                    for (int row = 0; row < height; row++)
-                    {
-                        IntPtr sourceRow = IntPtr.Add(pixelData, row * rowPitch);
-                        Marshal.Copy(sourceRow, frameData, row * rowWidth, rowWidth);
-                    }
-                }
-
-                var frame = new FrameData
-                {
-                    Width = width,
-                    Height = height,
-                    Timestamp = timestamp,
-                    FrameNumber = _totalFramesCaptured,
-                    PixelData = frameData
-                };
-
-                // Generate the filename that will be used when this frame is saved
-                string filename = GenerateFrameFilename(frame.FrameNumber);
-                
-                // Log ETW event with the filename
-                EtwSnapEventSource.Log.FrameCaptured(
-                    frame.FrameNumber,
-                    timestamp,
-                    width,
-                    height,
-                    filename
-                );
-
-                _frameBuffer.AddFrame(frame);
-
-                // Log progress every 30 frames (approximately once per second at 30 FPS)
-                if (_totalFramesCaptured % 30 == 0)
-                {
-                    var stats = _frameBuffer.GetStats();
-                    Console.WriteLine($"[ScreenRecorder] Frame {_totalFramesCaptured}: {width}x{height}, Buffer: {stats.FrameCount} frames ({stats.CurrentSizeInBytes / (1024 * 1024)}MB / {stats.MaxSizeInBytes / (1024 * 1024)}MB)");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[ScreenRecorder] Error in frame callback: {ex.Message}");
-            EtwSnapEventSource.Log.FrameCaptureError(_totalFramesCaptured, ex.Message);
-        }
-    }
-
     public void Dispose()
     {
         Stop();
-    }
-
-    /// <summary>
-    /// Generates the filename that will be used for saving a frame
-    /// This matches the filename generation logic in FrameSaver
-    /// </summary>
-    private string GenerateFrameFilename(int frameNumber)
-    {
-        // Get file extension based on image format
-        string extension = _options.ImageFormat switch
-        {
-            FrameImageFormat.PNG => ".png",
-            FrameImageFormat.JPEG => ".jpg",
-            FrameImageFormat.BMP => ".bmp",
-            _ => ".png"
-        };
-        
-        // Generate filename using session ID and frame number
-        // Format: frame_{sessionId}_{frameNumber:D6}.ext
-        return $"frame_{_sessionId}_{frameNumber:D6}{extension}";
     }
 }

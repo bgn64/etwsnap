@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "exports.h"
+#include "CircularFrameBuffer.h"
 
 namespace winrt
 {
@@ -14,13 +15,13 @@ namespace winrt
 class CaptureManager
 {
 public:
-    CaptureManager(HWND hwnd, int frameIntervalMs);
-    CaptureManager(HMONITOR hmon, int frameIntervalMs);
+    CaptureManager(HWND hwnd, int frameIntervalMs, size_t maxFrames);
+    CaptureManager(HMONITOR hmon, int frameIntervalMs, size_t maxFrames);
     ~CaptureManager();
 
     void StartCapture();
     void StopCapture();
-    void SetFrameCallback(FrameArrivedCallback callback, void* userContext);
+    std::vector<CapturedFrame> GetFrames();
 
     bool IsCursorEnabled() const;
     void SetCursorEnabled(bool enabled);
@@ -40,10 +41,9 @@ private:
     winrt::IDirect3DDevice m_device{ nullptr };
     winrt::com_ptr<ID3D11Device> m_d3dDevice{ nullptr };
     winrt::com_ptr<ID3D11DeviceContext> m_d3dContext{ nullptr };
-    winrt::com_ptr<ID3D11Texture2D> m_stagingTexture{ nullptr };
 
-    FrameArrivedCallback m_frameCallback{ nullptr };
-    void* m_userContext{ nullptr };
+    CircularFrameBuffer m_frameBuffer;
+    int m_frameNumber{ 0 };
 
     std::atomic<bool> m_closed{ false };
     std::chrono::steady_clock::time_point m_lastFrameTime;

@@ -142,12 +142,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="CaptureManager.h" />
+    <ClInclude Include="CircularFrameBuffer.h" />
     <ClInclude Include="exports.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CaptureManager.cpp" />
+    <ClCompile Include="CircularFrameBuffer.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="exports.cpp" />
     <ClCompile Include="pch.cpp">

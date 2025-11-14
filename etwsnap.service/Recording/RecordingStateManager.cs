@@ -52,15 +52,12 @@ public class RecordingStateManager : IRecordingStateManager
     {
         lock (_lockObj)
         {
-            // Update stats from the screen recorder
-            var stats = _screenRecorder.IsRecording ? _screenRecorder.GetStats() : null;
-            
             return new RecordingState
             {
                 IsRecording = _state.IsRecording,
                 StartTime = _state.StartTime,
                 CurrentSessionId = _state.CurrentSessionId,
-                Stats = stats
+                Stats = null // Stats only available after stopping
             };
         }
     }
@@ -118,21 +115,14 @@ public class RecordingStateManager : IRecordingStateManager
 
             Console.WriteLine($"[StateManager] Recording stopped - Session ID: {sessionId}, Duration: {duration}");
             
-            // Stop screen recording
-            _screenRecorder.Stop();
-
-            // Get final stats
-            var stats = _screenRecorder.GetStats();
-            Console.WriteLine($"[StateManager] Captured {stats.TotalFramesCaptured} frames");
-            Console.WriteLine($"[StateManager] Buffer contains {stats.BufferStats.FrameCount} frames ({stats.BufferStats.CurrentSizeInBytes / (1024 * 1024)} MB)");
+            // Stop screen recording and retrieve frames
+            var frames = _screenRecorder.Stop();
+            Console.WriteLine($"[StateManager] Retrieved {frames.Count} frames from recording");
 
             // Save frames to disk
             if (!string.IsNullOrEmpty(filePath))
             {
                 Console.WriteLine($"[StateManager] Saving recording to: {filePath}");
-                
-                // Retrieve frames from buffer
-                var frames = _screenRecorder.FrameBuffer.GetAllFrames();
                 
                 if (frames.Count > 0)
                 {
@@ -192,8 +182,9 @@ public class RecordingStateManager : IRecordingStateManager
 
             Console.WriteLine($"[StateManager] Recording cancelled - Session ID: {sessionId}, Duration: {duration}");
             
-            // Stop screen recording without saving
-            _screenRecorder.Stop();
+            // Stop screen recording without saving (discard frames)
+            var frames = _screenRecorder.Stop();
+            Console.WriteLine($"[StateManager] Discarded {frames.Count} frames");
             
             // Reset state
             _state.IsRecording = false;

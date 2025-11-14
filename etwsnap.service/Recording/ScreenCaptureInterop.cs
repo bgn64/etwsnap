@@ -10,34 +10,38 @@ public static class ScreenCaptureInterop
     private const string DllName = "windows.graphics.capture.dll";
 
     /// <summary>
-    /// Callback delegate for frame events
+    /// Structure representing a captured frame
     /// </summary>
-    /// <param name="pixelData">Pointer to BGRA8 pixel data</param>
-    /// <param name="width">Width of the frame in pixels</param>
-    /// <param name="height">Height of the frame in pixels</param>
-    /// <param name="rowPitch">Bytes per row (may be larger than width*4 due to alignment)</param>
-    /// <param name="timestamp">Timestamp in milliseconds since epoch</param>
-    /// <param name="userContext">User-defined context pointer</param>
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    public delegate void FrameArrivedCallback(IntPtr pixelData, int width, int height, int rowPitch, long timestamp, IntPtr userContext);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FrameData
+    {
+        public IntPtr PixelData;     // Pointer to BGRA8 pixel data
+        public int Width;            // Width in pixels
+        public int Height;           // Height in pixels
+        public int RowPitch;         // Bytes per row
+        public long Timestamp;       // Milliseconds since epoch
+        public int FrameNumber;      // Sequential frame number
+    }
 
     /// <summary>
     /// Creates a capture manager for the specified window
     /// </summary>
     /// <param name="windowHandle">Handle to the window to capture</param>
     /// <param name="frameIntervalMs">Interval between frames in milliseconds</param>
+    /// <param name="maxFrames">Maximum frames to store in circular buffer</param>
     /// <returns>Handle to the capture manager, or IntPtr.Zero on failure</returns>
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern IntPtr Capture_Create(IntPtr windowHandle, int frameIntervalMs);
+    public static extern IntPtr Capture_Create(IntPtr windowHandle, int frameIntervalMs, int maxFrames);
 
     /// <summary>
     /// Creates a capture manager for the specified monitor
     /// </summary>
     /// <param name="monitorHandle">Handle to the monitor to capture (HMONITOR)</param>
     /// <param name="frameIntervalMs">Interval between frames in milliseconds</param>
+    /// <param name="maxFrames">Maximum frames to store in circular buffer</param>
     /// <returns>Handle to the capture manager, or IntPtr.Zero on failure</returns>
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern IntPtr Capture_CreateForMonitor(IntPtr monitorHandle, int frameIntervalMs);
+    public static extern IntPtr Capture_CreateForMonitor(IntPtr monitorHandle, int frameIntervalMs, int maxFrames);
 
     /// <summary>
     /// Starts the capture
@@ -62,13 +66,22 @@ public static class ScreenCaptureInterop
     public static extern void Capture_Destroy(IntPtr captureHandle);
 
     /// <summary>
-    /// Sets the callback function for frame events
+    /// Gets all captured frames from the buffer
     /// </summary>
     /// <param name="captureHandle">Handle to the capture manager</param>
-    /// <param name="callback">Callback function to invoke when frames arrive</param>
-    /// <param name="userContext">User-defined context pointer</param>
+    /// <param name="outFrames">Pointer to receive array of frames</param>
+    /// <param name="outCount">Pointer to receive number of frames</param>
+    /// <returns>True on success, false on failure</returns>
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern void Capture_SetFrameCallback(IntPtr captureHandle, FrameArrivedCallback callback, IntPtr userContext);
+    public static extern bool Capture_GetFrames(IntPtr captureHandle, out IntPtr outFrames, out int outCount);
+
+    /// <summary>
+    /// Frees frame data allocated by Capture_GetFrames
+    /// </summary>
+    /// <param name="frames">Array of frames to free</param>
+    /// <param name="count">Number of frames in array</param>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void Capture_FreeFrames(IntPtr frames, int count);
 
     /// <summary>
     /// Enables or disables cursor capture
