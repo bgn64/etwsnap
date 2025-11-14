@@ -34,6 +34,10 @@
 #include <atomic>
 #include <memory>
 
+// ETW TraceLogging
+#include <TraceLoggingProvider.h>
+#include <TraceLoggingActivity.h>
+
 #include "exports.h"
 
 #endif //PCH_H

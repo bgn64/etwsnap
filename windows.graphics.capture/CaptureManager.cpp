@@ -1,7 +1,10 @@
 #include "pch.h"
 #include "CaptureManager.h"
 #include "CircularFrameBuffer.h"
+#include "EtwLogging.h"
 #include <chrono>
+#include <sstream>
+#include <iomanip>
 
 using namespace winrt;
 using namespace winrt::Windows::Foundation;
@@ -13,6 +16,8 @@ using namespace winrt::Windows::Graphics::DirectX::Direct3D11;
 CaptureManager::CaptureManager(HWND hwnd, int frameIntervalMs, size_t maxFrames)
     : m_frameIntervalMs(frameIntervalMs)
     , m_frameBuffer(maxFrames)
+    , m_maxFrames(maxFrames)
+    , m_sessionId(GenerateSessionId())
 {
     // Initialize Direct3D device using robmikh.common helper
     m_d3dDevice = robmikh::common::uwp::CreateD3D11Device();
@@ -41,6 +46,8 @@ CaptureManager::CaptureManager(HWND hwnd, int frameIntervalMs, size_t maxFrames)
 CaptureManager::CaptureManager(HMONITOR hmon, int frameIntervalMs, size_t maxFrames)
     : m_frameIntervalMs(frameIntervalMs)
     , m_frameBuffer(maxFrames)
+    , m_maxFrames(maxFrames)
+    , m_sessionId(GenerateSessionId())
 {
     // Initialize Direct3D device using robmikh.common helper
     m_d3dDevice = robmikh::common::uwp::CreateD3D11Device();
@@ -75,7 +82,13 @@ void CaptureManager::StartCapture()
 {
     CheckClosed();
     m_lastFrameTime = std::chrono::steady_clock::now();
+    m_recordingStartTime = m_lastFrameTime;
     m_session.StartCapture();
+
+    // Log recording started event
+    int fps = m_frameIntervalMs > 0 ? (1000 / m_frameIntervalMs) : 0;
+    int bufferSizeMB = static_cast<int>(m_maxFrames * 4 * 1920 * 1080 / (1024 * 1024)); // Rough estimate
+    EtwLogging::LogRecordingStarted(m_sessionId, fps, bufferSizeMB);
 }
 
 void CaptureManager::StopCapture()
@@ -83,6 +96,14 @@ void CaptureManager::StopCapture()
     auto expected = false;
     if (m_closed.compare_exchange_strong(expected, true))
     {
+        // Calculate recording duration
+        auto now = std::chrono::steady_clock::now();
+        auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - m_recordingStartTime).count();
+
+        // Log recording stopped event
+        EtwLogging::LogRecordingStopped(m_sessionId, m_frameNumber, durationMs);
+
         if (m_session)
         {
             m_session.Close();
@@ -144,7 +165,13 @@ void CaptureManager::OnFrameArrived(
         auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
 
-        // TODO: Log ETW event here for frame captured (TraceLogging)
+        // Generate filename for this frame
+        std::wstringstream filenameStream;
+        filenameStream << L"frame_" << std::setw(6) << std::setfill(L'0') << m_frameNumber << L".png";
+        std::wstring filename = filenameStream.str();
+
+        // Log ETW event for frame captured
+        EtwLogging::LogFrameCaptured(m_frameNumber, timestamp, contentSize.Width, contentSize.Height, filename);
 
         // Get the surface texture from the frame
         auto surfaceTexture = GetDXGIInterfaceFromObject<ID3D11Texture2D>(frame.Surface());
@@ -175,4 +202,16 @@ void CaptureManager::CheckClosed()
     {
         throw hresult_error(RO_E_CLOSED);
     }
+}
+
+std::wstring CaptureManager::GenerateSessionId()
+{
+    // Generate a simple session ID based on timestamp
+    auto now = std::chrono::system_clock::now();
+    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()).count();
+    
+    std::wstringstream ss;
+    ss << L"session_" << timestamp;
+    return ss.str();
 }

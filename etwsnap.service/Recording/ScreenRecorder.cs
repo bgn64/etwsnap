@@ -108,9 +108,6 @@ public class ScreenRecorder : IScreenRecorder
             _startTime = DateTime.UtcNow;
             _sessionId = Guid.NewGuid().ToString();
             
-            // Log ETW event for recording started
-            EtwSnapEventSource.Log.RecordingStarted(_sessionId, _options.FramesPerSecond, (int)_options.MaxBufferSizeMB);
-            
             Console.WriteLine("[ScreenRecorder] Recording started successfully");
             return true;
         }
@@ -174,12 +171,6 @@ public class ScreenRecorder : IScreenRecorder
             _isRecording = false;
 
             var duration = _startTime.HasValue ? DateTime.UtcNow - _startTime.Value : TimeSpan.Zero;
-            
-            // Log ETW event for recording stopped
-            if (_sessionId != null)
-            {
-                EtwSnapEventSource.Log.RecordingStopped(_sessionId, frames.Count, (long)duration.TotalMilliseconds);
-            }
             
             Console.WriteLine($"[ScreenRecorder] Recording stopped. Total frames: {frames.Count}, Duration: {duration:mm\\:ss\\.fff}");
             return frames;

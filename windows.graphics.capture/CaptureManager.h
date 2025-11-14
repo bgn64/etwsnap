@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "exports.h"
 #include "CircularFrameBuffer.h"
+#include <string>
 
 namespace winrt
 {
@@ -32,6 +33,7 @@ private:
         winrt::IInspectable const& args);
 
     void CheckClosed();
+    std::wstring GenerateSessionId();
 
 private:
     winrt::GraphicsCaptureItem m_item{ nullptr };
@@ -47,5 +49,8 @@ private:
 
     std::atomic<bool> m_closed{ false };
     std::chrono::steady_clock::time_point m_lastFrameTime;
+    std::chrono::steady_clock::time_point m_recordingStartTime;
     int m_frameIntervalMs;
+    size_t m_maxFrames;
+    std::wstring m_sessionId;
 };
