@@ -1,4 +1,5 @@
-﻿using ETWSnap.Client;
+﻿using ETWSnap;
+using ETWSnap.Client;
 using ETWSnap.IPC;
 
 class Program
@@ -21,7 +22,13 @@ class Program
 
         try
         {
-            // Ensure service is running
+            // Handle client-side only commands
+            if (parsedCommand.IsClientSideOnly)
+            {
+                return ExecuteClientSideCommand(args[0].ToLowerInvariant(), parsedCommand);
+            }
+
+            // Ensure service is running for service-based commands
             if (!await EnsureServiceRunningAsync(serviceManager))
             {
                 Console.Error.WriteLine("Failed to start or connect to service");
@@ -38,6 +45,34 @@ class Program
             Console.Error.WriteLine($"Unexpected error: {ex.Message}");
             return 1;
         }
+    }
+
+    private static int ExecuteClientSideCommand(string command, ParsedCommand parsedCommand)
+    {
+        switch (command)
+        {
+            case "provider-info":
+                return ExecuteProviderInfo();
+            
+            default:
+                Console.Error.WriteLine($"Unknown client-side command: {command}");
+                return 1;
+        }
+    }
+
+    private static int ExecuteProviderInfo()
+    {
+        Console.WriteLine("ETWSnap ETW Provider Information:");
+        Console.WriteLine();
+        Console.WriteLine($"Provider Name: {ETWSnapConstants.ProviderName}");
+        Console.WriteLine($"Provider GUID: {ETWSnapConstants.ProviderGuid}");
+        Console.WriteLine();
+        Console.WriteLine("Use this information when configuring ETW tracing tools like WPR or PerfView.");
+        Console.WriteLine();
+        Console.WriteLine("Example WPRP EventProvider definition:");
+        Console.WriteLine($"  <EventProvider Id=\"{ETWSnapConstants.ProviderName}\" Name=\"{ETWSnapConstants.ProviderGuid}\">");
+        Console.WriteLine("  </EventProvider>");
+        return 0;
     }
 
     private static async Task<bool> EnsureServiceRunningAsync(IServiceManager serviceManager)

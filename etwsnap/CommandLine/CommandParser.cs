@@ -11,6 +11,7 @@ public class ParsedCommand
     public string? FilePath { get; set; }
     public bool IsValid { get; set; }
     public string ErrorMessage { get; set; } = string.Empty;
+    public bool IsClientSideOnly { get; set; } = false;
 }
 
 /// <summary>
@@ -46,6 +47,7 @@ public class CommandParser : ICommandParser
             "stop" => ParseStopCommand(args),
             "cancel" => ParseCancelCommand(args),
             "status" => ParseStatusCommand(args),
+            "provider-info" => ParseProviderInfoCommand(args),
             _ => new ParsedCommand
             {
                 IsValid = false,
@@ -139,6 +141,25 @@ public class CommandParser : ICommandParser
         };
     }
 
+    private ParsedCommand ParseProviderInfoCommand(string[] args)
+    {
+        if (args.Length > 1)
+        {
+            return new ParsedCommand
+            {
+                IsValid = false,
+                ErrorMessage = "Provider-info command does not accept additional arguments"
+            };
+        }
+
+        return new ParsedCommand
+        {
+            Type = CommandType.CheckStatus, // Unused for client-side commands
+            IsValid = true,
+            IsClientSideOnly = true
+        };
+    }
+
     public void PrintUsage()
     {
         Console.WriteLine("ETWSnap - ETW Recording Utility");
@@ -148,10 +169,12 @@ public class CommandParser : ICommandParser
         Console.WriteLine("  etwsnap stop <filepath>          - Stop recording and save to file");
         Console.WriteLine("  etwsnap cancel                   - Cancel recording without saving");
         Console.WriteLine("  etwsnap status                   - Check recording status");
+        Console.WriteLine("  etwsnap provider-info            - Display ETW provider information");
         Console.WriteLine();
         Console.WriteLine("Examples:");
         Console.WriteLine("  etwsnap start");
         Console.WriteLine("  etwsnap stop C:\\recordings\\trace.etl");
         Console.WriteLine("  etwsnap cancel");
+        Console.WriteLine("  etwsnap provider-info");
     }
 }
