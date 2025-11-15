@@ -217,5 +217,162 @@ extern "C" {
         }
         return false;
     }
+
+    // ===== Window and Monitor Enumeration Implementation =====
+
+    struct EnumWindowsData {
+        std::vector<WindowInfo> windows;
+    };
+
+    BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+        auto data = reinterpret_cast<EnumWindowsData*>(lParam);
+
+        // Skip invisible windows
+        if (!IsWindowVisible(hwnd)) {
+            return TRUE;
+        }
+
+        // Get window title
+        int titleLength = GetWindowTextLengthW(hwnd);
+        if (titleLength == 0) {
+            return TRUE; // Skip windows without titles
+        }
+
+        wchar_t* title = new wchar_t[titleLength + 1];
+        GetWindowTextW(hwnd, title, titleLength + 1);
+
+        // Get window rect
+        RECT rect{};
+        GetWindowRect(hwnd, &rect);
+
+        WindowInfo info{};
+        info.Handle = hwnd;
+        info.Title = title;
+        info.Width = rect.right - rect.left;
+        info.Height = rect.bottom - rect.top;
+        info.IsVisible = true;
+
+        data->windows.push_back(info);
+        return TRUE;
+    }
+
+    CAPTURE_API bool Capture_EnumerateWindows(WindowInfo** outWindows, int* outCount) {
+        try {
+            if (outWindows == nullptr || outCount == nullptr) {
+                return false;
+            }
+
+            EnumWindowsData data;
+            EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&data));
+
+            if (data.windows.empty()) {
+                *outWindows = nullptr;
+                *outCount = 0;
+                return true;
+            }
+
+            // Allocate array for output
+            auto windowArray = new WindowInfo[data.windows.size()];
+            for (size_t i = 0; i < data.windows.size(); i++) {
+                windowArray[i] = data.windows[i];
+            }
+
+            *outWindows = windowArray;
+            *outCount = static_cast<int>(data.windows.size());
+            return true;
+        }
+        catch (...) {
+            return false;
+        }
+    }
+
+    CAPTURE_API void Capture_FreeWindows(WindowInfo* windows, int count) {
+        if (windows != nullptr) {
+            for (int i = 0; i < count; i++) {
+                if (windows[i].Title != nullptr) {
+                    delete[] windows[i].Title;
+                }
+            }
+            delete[] windows;
+        }
+    }
+
+    struct EnumMonitorsData {
+        std::vector<MonitorInfo> monitors;
+    };
+
+    BOOL CALLBACK EnumMonitorsProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+        auto data = reinterpret_cast<EnumMonitorsData*>(dwData);
+
+        MONITORINFOEXW monitorInfo{};
+        monitorInfo.cbSize = sizeof(MONITORINFOEXW);
+
+        if (GetMonitorInfoW(hMonitor, &monitorInfo)) {
+            // Duplicate device name string
+            size_t len = wcslen(monitorInfo.szDevice);
+            wchar_t* deviceName = new wchar_t[len + 1];
+            wcscpy_s(deviceName, len + 1, monitorInfo.szDevice);
+
+            MonitorInfo info{};
+            info.Handle = hMonitor;
+            info.DeviceName = deviceName;
+            info.Left = monitorInfo.rcMonitor.left;
+            info.Top = monitorInfo.rcMonitor.top;
+            info.Right = monitorInfo.rcMonitor.right;
+            info.Bottom = monitorInfo.rcMonitor.bottom;
+            info.IsPrimary = (monitorInfo.dwFlags & MONITORINFOF_PRIMARY) != 0;
+
+            data->monitors.push_back(info);
+        }
+
+        return TRUE;
+    }
+
+    CAPTURE_API bool Capture_EnumerateMonitors(MonitorInfo** outMonitors, int* outCount) {
+        try {
+            if (outMonitors == nullptr || outCount == nullptr) {
+                return false;
+            }
+
+            EnumMonitorsData data;
+            EnumDisplayMonitors(nullptr, nullptr, EnumMonitorsProc, reinterpret_cast<LPARAM>(&data));
+
+            if (data.monitors.empty()) {
+                *outMonitors = nullptr;
+                *outCount = 0;
+                return true;
+            }
+
+            // Allocate array for output
+            auto monitorArray = new MonitorInfo[data.monitors.size()];
+            for (size_t i = 0; i < data.monitors.size(); i++) {
+                monitorArray[i] = data.monitors[i];
+            }
+
+            *outMonitors = monitorArray;
+            *outCount = static_cast<int>(data.monitors.size());
+            return true;
+        }
+        catch (...) {
+            return false;
+        }
+    }
+
+    CAPTURE_API void Capture_FreeMonitors(MonitorInfo* monitors, int count) {
+        if (monitors != nullptr) {
+            for (int i = 0; i < count; i++) {
+                if (monitors[i].DeviceName != nullptr) {
+                    delete[] monitors[i].DeviceName;
+                }
+            }
+            delete[] monitors;
+        }
+    }
+
+    CAPTURE_API void Capture_FreeString(wchar_t* str) {
+        if (str != nullptr) {
+            delete[] str;
+        }
+    }
 }
 

@@ -218,7 +218,7 @@ public class ScreenRecorder : IScreenRecorder
     }
 
     /// <summary>
-    /// Gets a list of all available monitor handles
+    /// Gets a list of all available monitor handles (deprecated - use EnumerateMonitorsDetailed)
     /// </summary>
     public static List<(IntPtr Handle, string DeviceName, bool IsPrimary)> EnumerateMonitors()
     {
@@ -236,6 +236,144 @@ public class ScreenRecorder : IScreenRecorder
         
         ScreenCaptureInterop.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
         return monitors;
+    }
+
+    /// <summary>
+    /// Managed representation of monitor information
+    /// </summary>
+    public class MonitorInformation
+    {
+        public IntPtr Handle { get; set; }
+        public string DeviceName { get; set; } = string.Empty;
+        public int Left { get; set; }
+        public int Top { get; set; }
+        public int Right { get; set; }
+        public int Bottom { get; set; }
+        public bool IsPrimary { get; set; }
+        public int Width => Right - Left;
+        public int Height => Bottom - Top;
+    }
+
+    /// <summary>
+    /// Managed representation of window information
+    /// </summary>
+    public class WindowInformation
+    {
+        public IntPtr Handle { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public bool IsVisible { get; set; }
+    }
+
+    /// <summary>
+    /// Enumerates all available monitors with detailed information
+    /// </summary>
+    public static List<MonitorInformation> EnumerateMonitorsDetailed()
+    {
+        var monitors = new List<MonitorInformation>();
+
+        if (ScreenCaptureInterop.Capture_EnumerateMonitors(out IntPtr monitorsPtr, out int count))
+        {
+            if (count > 0 && monitorsPtr != IntPtr.Zero)
+            {
+                int structSize = Marshal.SizeOf<ScreenCaptureInterop.MonitorInfoNative>();
+
+                for (int i = 0; i < count; i++)
+                {
+                    IntPtr monitorPtr = IntPtr.Add(monitorsPtr, i * structSize);
+                    var nativeMonitor = Marshal.PtrToStructure<ScreenCaptureInterop.MonitorInfoNative>(monitorPtr);
+
+                    monitors.Add(new MonitorInformation
+                    {
+                        Handle = nativeMonitor.Handle,
+                        DeviceName = Marshal.PtrToStringUni(nativeMonitor.DeviceName) ?? string.Empty,
+                        Left = nativeMonitor.Left,
+                        Top = nativeMonitor.Top,
+                        Right = nativeMonitor.Right,
+                        Bottom = nativeMonitor.Bottom,
+                        IsPrimary = nativeMonitor.IsPrimary
+                    });
+                }
+
+                ScreenCaptureInterop.Capture_FreeMonitors(monitorsPtr, count);
+            }
+        }
+
+        return monitors;
+    }
+
+    /// <summary>
+    /// Enumerates all visible windows with detailed information
+    /// </summary>
+    public static List<WindowInformation> EnumerateWindows()
+    {
+        var windows = new List<WindowInformation>();
+
+        if (ScreenCaptureInterop.Capture_EnumerateWindows(out IntPtr windowsPtr, out int count))
+        {
+            if (count > 0 && windowsPtr != IntPtr.Zero)
+            {
+                int structSize = Marshal.SizeOf<ScreenCaptureInterop.WindowInfo>();
+
+                for (int i = 0; i < count; i++)
+                {
+                    IntPtr windowPtr = IntPtr.Add(windowsPtr, i * structSize);
+                    var nativeWindow = Marshal.PtrToStructure<ScreenCaptureInterop.WindowInfo>(windowPtr);
+
+                    windows.Add(new WindowInformation
+                    {
+                        Handle = nativeWindow.Handle,
+                        Title = Marshal.PtrToStringUni(nativeWindow.Title) ?? string.Empty,
+                        Width = nativeWindow.Width,
+                        Height = nativeWindow.Height,
+                        IsVisible = nativeWindow.IsVisible
+                    });
+                }
+
+                ScreenCaptureInterop.Capture_FreeWindows(windowsPtr, count);
+            }
+        }
+
+        return windows;
+    }
+
+    /// <summary>
+    /// Gets a monitor handle by 1-based index
+    /// </summary>
+    public static IntPtr GetMonitorByIndex(int index)
+    {
+        if (index <= 0)
+        {
+            return IntPtr.Zero;
+        }
+
+        var monitors = EnumerateMonitorsDetailed();
+        if (index > monitors.Count)
+        {
+            return IntPtr.Zero;
+        }
+
+        return monitors[index - 1].Handle;
+    }
+
+    /// <summary>
+    /// Gets a window handle by 1-based index
+    /// </summary>
+    public static IntPtr GetWindowByIndex(int index)
+    {
+        if (index <= 0)
+        {
+            return IntPtr.Zero;
+        }
+
+        var windows = EnumerateWindows();
+        if (index > windows.Count)
+        {
+            return IntPtr.Zero;
+        }
+
+        return windows[index - 1].Handle;
     }
 
     public void Dispose()

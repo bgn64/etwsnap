@@ -18,7 +18,7 @@ public interface IRecordingStateManager
 {
     bool IsRecording { get; }
     RecordingState GetState();
-    bool StartRecording();
+    bool StartRecording(RecordingOptions? options = null);
     bool StopRecording(string? filePath = null);
     bool CancelRecording();
 }
@@ -62,7 +62,7 @@ public class RecordingStateManager : IRecordingStateManager
         }
     }
 
-    public bool StartRecording()
+    public bool StartRecording(RecordingOptions? options = null)
     {
         lock (_lockObj)
         {
@@ -76,18 +76,20 @@ public class RecordingStateManager : IRecordingStateManager
 
             Console.WriteLine($"[StateManager] Recording started - Session ID: {_state.CurrentSessionId}");
             
-            // Start screen recording with default options
-            // By default, capture the primary monitor (both handles are zero)
-            var options = new RecordingOptions
+            // Create recording options with defaults if not provided
+            var recordingOptions = options ?? new RecordingOptions();
+            
+            // Apply default values if not specified
+            if (recordingOptions.FramesPerSecond == 0)
             {
-                FramesPerSecond = 30,           // 30 FPS
-                MaxBufferSizeMB = 500,          // 500 MB buffer
-                CaptureCursor = true,           // Include cursor
-                WindowHandle = IntPtr.Zero,     // Not capturing a specific window
-                MonitorHandle = IntPtr.Zero     // Will capture primary monitor
-            };
+                recordingOptions.FramesPerSecond = 30;
+            }
+            if (recordingOptions.MaxBufferSizeMB == 0)
+            {
+                recordingOptions.MaxBufferSizeMB = 500;
+            }
 
-            if (!_screenRecorder.Start(options))
+            if (!_screenRecorder.Start(recordingOptions))
             {
                 Console.WriteLine($"[StateManager] Failed to start screen recorder");
                 _state.StartTime = null;

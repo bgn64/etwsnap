@@ -12,6 +12,8 @@ public class ParsedCommand
     public bool IsValid { get; set; }
     public string ErrorMessage { get; set; } = string.Empty;
     public bool IsClientSideOnly { get; set; } = false;
+    public long WindowHandle { get; set; } = 0;
+    public long MonitorHandle { get; set; } = 0;
 }
 
 /// <summary>
@@ -48,6 +50,8 @@ public class CommandParser : ICommandParser
             "cancel" => ParseCancelCommand(args),
             "status" => ParseStatusCommand(args),
             "provider-info" => ParseProviderInfoCommand(args),
+            "list-windows" => ParseListWindowsCommand(args),
+            "list-monitors" => ParseListMonitorsCommand(args),
             _ => new ParsedCommand
             {
                 IsValid = false,
@@ -58,21 +62,87 @@ public class CommandParser : ICommandParser
 
     private ParsedCommand ParseStartCommand(string[] args)
     {
-        if (args.Length > 1)
-        {
-            return new ParsedCommand
-            {
-                IsValid = false,
-                ErrorMessage = "Start command does not accept additional arguments"
-            };
-        }
-
-        return new ParsedCommand
+        var result = new ParsedCommand
         {
             Type = CommandType.Start,
             IsValid = true
         };
+
+        // Parse optional parameters
+        for (int i = 1; i < args.Length; i++)
+        {
+            var arg = args[i];
+
+            if (arg == "--window" || arg == "-w")
+            {
+                if (i + 1 >= args.Length)
+                {
+                    return new ParsedCommand
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"{arg} requires a window handle value"
+                    };
+                }
+
+                if (!TryParseHandle(args[i + 1], out long handle))
+                {
+                    return new ParsedCommand
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"Invalid window handle: {args[i + 1]}. Must be a valid handle (hex with 0x prefix or decimal)."
+                    };
+                }
+
+                result.WindowHandle = handle;
+                i++; // Skip next argument
+            }
+            else if (arg == "--monitor" || arg == "-m")
+            {
+                if (i + 1 >= args.Length)
+                {
+                    return new ParsedCommand
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"{arg} requires a monitor handle value"
+                    };
+                }
+
+                if (!TryParseHandle(args[i + 1], out long handle))
+                {
+                    return new ParsedCommand
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"Invalid monitor handle: {args[i + 1]}. Must be a valid handle (hex with 0x prefix or decimal)."
+                    };
+                }
+
+                result.MonitorHandle = handle;
+                i++; // Skip next argument
+            }
+            else
+            {
+                return new ParsedCommand
+                {
+                    IsValid = false,
+                    ErrorMessage = $"Unknown parameter: {arg}"
+                };
+            }
+        }
+
+        // Validate that both window and monitor are not specified
+        if (result.WindowHandle != 0 && result.MonitorHandle != 0)
+        {
+            return new ParsedCommand
+            {
+                IsValid = false,
+                ErrorMessage = "Cannot specify both --window and --monitor"
+            };
+        }
+
+        return result;
     }
+
+
 
     private ParsedCommand ParseStopCommand(string[] args)
     {
@@ -160,21 +230,86 @@ public class CommandParser : ICommandParser
         };
     }
 
+    private ParsedCommand ParseListWindowsCommand(string[] args)
+    {
+        if (args.Length > 1)
+        {
+            return new ParsedCommand
+            {
+                IsValid = false,
+                ErrorMessage = "List-windows command does not accept additional arguments"
+            };
+        }
+
+        return new ParsedCommand
+        {
+            Type = CommandType.ListWindows,
+            IsValid = true
+        };
+    }
+
+    private ParsedCommand ParseListMonitorsCommand(string[] args)
+    {
+        if (args.Length > 1)
+        {
+            return new ParsedCommand
+            {
+                IsValid = false,
+                ErrorMessage = "List-monitors command does not accept additional arguments"
+            };
+        }
+
+        return new ParsedCommand
+        {
+            Type = CommandType.ListMonitors,
+            IsValid = true
+        };
+    }
+
+    private bool TryParseHandle(string value, out long handle)
+    {
+        handle = 0;
+
+        // Support both decimal and hexadecimal (0x prefix)
+        if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            if (long.TryParse(value.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out handle))
+            {
+                return true;
+            }
+        }
+        else if (long.TryParse(value, out handle))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     public void PrintUsage()
     {
         Console.WriteLine("ETWSnap - ETW Recording Utility");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  etwsnap start                    - Start a new recording session");
+        Console.WriteLine("  etwsnap start [options]          - Start a new recording session");
         Console.WriteLine("  etwsnap stop <filepath>          - Stop recording and save to file");
         Console.WriteLine("  etwsnap cancel                   - Cancel recording without saving");
         Console.WriteLine("  etwsnap status                   - Check recording status");
+        Console.WriteLine("  etwsnap list-windows             - List all capturable windows");
+        Console.WriteLine("  etwsnap list-monitors            - List all available monitors");
         Console.WriteLine("  etwsnap provider-info            - Display ETW provider information");
         Console.WriteLine();
+        Console.WriteLine("Start Command Options:");
+        Console.WriteLine("  --window <index>, -w <index>    - Capture a specific window (use list-windows to see indices)");
+        Console.WriteLine("  --monitor <index>, -m <index>   - Capture a specific monitor (use list-monitors to see indices)");
+        Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine("  etwsnap start");
-        Console.WriteLine("  etwsnap stop C:\\recordings\\trace.etl");
-        Console.WriteLine("  etwsnap cancel");
-        Console.WriteLine("  etwsnap provider-info");
+        Console.WriteLine("  etwsnap start                    - Start recording (captures primary monitor)");
+        Console.WriteLine("  etwsnap start -m 0x20001         - Start recording monitor with handle 0x20001");
+        Console.WriteLine("  etwsnap start -w 0x12345         - Start recording window with handle 0x12345");
+        Console.WriteLine("  etwsnap list-windows             - List available windows");
+        Console.WriteLine("  etwsnap list-monitors            - List available monitors");
+        Console.WriteLine("  etwsnap stop recording.etl       - Stop and save recording");
+        Console.WriteLine("  etwsnap cancel                   - Cancel without saving");
     }
 }

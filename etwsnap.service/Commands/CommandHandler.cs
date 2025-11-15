@@ -33,6 +33,8 @@ public class CommandHandler : ICommandHandler
             CommandType.Stop => HandleStopCommand(request),
             CommandType.Cancel => HandleCancelCommand(request),
             CommandType.CheckStatus => HandleStatusCommand(request),
+            CommandType.ListWindows => HandleListWindowsCommand(request),
+            CommandType.ListMonitors => HandleListMonitorsCommand(request),
             _ => Task.FromResult(new Response
             {
                 Status = ResponseStatus.Error,
@@ -53,14 +55,29 @@ public class CommandHandler : ICommandHandler
             });
         }
 
-        var success = _stateManager.StartRecording();
+        // Create recording options from request
+                var options = new RecordingOptions
+                {
+                    WindowHandle = new IntPtr(request.WindowHandle),
+                    MonitorHandle = new IntPtr(request.MonitorHandle)
+                };        var success = _stateManager.StartRecording(options);
         
         if (success)
         {
+            string target = "primary monitor";
+            if (options.WindowHandle != IntPtr.Zero)
+            {
+                target = $"window 0x{options.WindowHandle:X}";
+            }
+            else if (options.MonitorHandle != IntPtr.Zero)
+            {
+                target = $"monitor 0x{options.MonitorHandle:X}";
+            }
+
             return Task.FromResult(new Response
             {
                 Status = ResponseStatus.Success,
-                Message = "Recording started successfully",
+                Message = $"Recording started successfully (capturing {target})",
                 IsRecording = true
             });
         }
@@ -167,5 +184,72 @@ public class CommandHandler : ICommandHandler
             Message = message,
             IsRecording = state.IsRecording
         });
+    }
+
+    private Task<Response> HandleListWindowsCommand(Request request)
+    {
+        try
+        {
+            var windows = ScreenRecorder.EnumerateWindows();
+            var response = new Response
+            {
+                Status = ResponseStatus.Success,
+                Message = $"Found {windows.Count} capturable windows"
+            };
+
+            // Serialize window information to response data
+            for (int i = 0; i < windows.Count; i++)
+            {
+                var window = windows[i];
+                response.Data[$"window_{i}_handle"] = $"0x{window.Handle:X}";
+                response.Data[$"window_{i}_title"] = window.Title;
+                response.Data[$"window_{i}_size"] = $"{window.Width}x{window.Height}";
+            }
+            response.Data["count"] = windows.Count.ToString();
+
+            return Task.FromResult(response);
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(new Response
+            {
+                Status = ResponseStatus.Error,
+                Message = $"Failed to enumerate windows: {ex.Message}"
+            });
+        }
+    }
+
+    private Task<Response> HandleListMonitorsCommand(Request request)
+    {
+        try
+        {
+            var monitors = ScreenRecorder.EnumerateMonitorsDetailed();
+            var response = new Response
+            {
+                Status = ResponseStatus.Success,
+                Message = $"Found {monitors.Count} monitors"
+            };
+
+            // Serialize monitor information to response data
+            for (int i = 0; i < monitors.Count; i++)
+            {
+                var monitor = monitors[i];
+                response.Data[$"monitor_{i}_handle"] = $"0x{monitor.Handle:X}";
+                response.Data[$"monitor_{i}_name"] = monitor.DeviceName;
+                response.Data[$"monitor_{i}_bounds"] = $"{monitor.Width}x{monitor.Height} at ({monitor.Left},{monitor.Top})";
+                response.Data[$"monitor_{i}_primary"] = monitor.IsPrimary.ToString();
+            }
+            response.Data["count"] = monitors.Count.ToString();
+
+            return Task.FromResult(response);
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(new Response
+            {
+                Status = ResponseStatus.Error,
+                Message = $"Failed to enumerate monitors: {ex.Message}"
+            });
+        }
     }
 }

@@ -157,4 +157,75 @@ public static class ScreenCaptureInterop
     public const uint MONITOR_DEFAULTTONULL = 0;
     public const uint MONITOR_DEFAULTTOPRIMARY = 1;
     public const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    // Window and Monitor Enumeration
+
+    /// <summary>
+    /// Structure representing information about a window
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WindowInfo
+    {
+        public IntPtr Handle;           // HWND of the window
+        public IntPtr Title;            // Window title (wide string pointer)
+        public int Width;               // Window width in pixels
+        public int Height;              // Window height in pixels
+        public bool IsVisible;          // Whether the window is visible
+    }
+
+    /// <summary>
+    /// Structure representing information about a monitor
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MonitorInfoNative
+    {
+        public IntPtr Handle;           // HMONITOR handle
+        public IntPtr DeviceName;       // Device name (wide string pointer)
+        public int Left;                // Monitor bounds - left
+        public int Top;                 // Monitor bounds - top
+        public int Right;               // Monitor bounds - right
+        public int Bottom;              // Monitor bounds - bottom
+        public bool IsPrimary;          // Whether this is the primary monitor
+    }
+
+    /// <summary>
+    /// Enumerates all visible windows
+    /// </summary>
+    /// <param name="outWindows">Pointer to receive array of WindowInfo</param>
+    /// <param name="outCount">Pointer to receive number of windows</param>
+    /// <returns>True on success, false on failure</returns>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern bool Capture_EnumerateWindows(out IntPtr outWindows, out int outCount);
+
+    /// <summary>
+    /// Frees windows array allocated by Capture_EnumerateWindows
+    /// </summary>
+    /// <param name="windows">Array of windows to free</param>
+    /// <param name="count">Number of windows in array</param>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void Capture_FreeWindows(IntPtr windows, int count);
+
+    /// <summary>
+    /// Enumerates all monitors
+    /// </summary>
+    /// <param name="outMonitors">Pointer to receive array of MonitorInfo</param>
+    /// <param name="outCount">Pointer to receive number of monitors</param>
+    /// <returns>True on success, false on failure</returns>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern bool Capture_EnumerateMonitors(out IntPtr outMonitors, out int outCount);
+
+    /// <summary>
+    /// Frees monitors array allocated by Capture_EnumerateMonitors
+    /// </summary>
+    /// <param name="monitors">Array of monitors to free</param>
+    /// <param name="count">Number of monitors in array</param>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void Capture_FreeMonitors(IntPtr monitors, int count);
+
+    /// <summary>
+    /// Frees a string allocated by native code
+    /// </summary>
+    /// <param name="str">String to free</param>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void Capture_FreeString(IntPtr str);
 }

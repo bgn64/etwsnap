@@ -8,7 +8,9 @@ public enum CommandType
     Start,
     Stop,
     Cancel,
-    CheckStatus
+    CheckStatus,
+    ListWindows,
+    ListMonitors
 }
 
 /// <summary>
@@ -30,6 +32,10 @@ public class Request
     public CommandType Command { get; set; }
     public string? FilePath { get; set; }  // Used for Stop command
     public Dictionary<string, string> Parameters { get; set; } = new();
+    
+    // Recording options for Start command (using long for JSON serialization)
+    public long WindowHandle { get; set; } = 0;
+    public long MonitorHandle { get; set; } = 0;
 }
 
 /// <summary>
@@ -40,4 +46,5 @@ public class Response
     public ResponseStatus Status { get; set; }
     public string Message { get; set; } = string.Empty;
     public bool IsRecording { get; set; }
+    public Dictionary<string, string> Data { get; set; } = new();
 }

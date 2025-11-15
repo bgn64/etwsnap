@@ -100,7 +100,9 @@ class Program
         var request = new Request
         {
             Command = parsedCommand.Type,
-            FilePath = parsedCommand.FilePath
+            FilePath = parsedCommand.FilePath,
+            WindowHandle = parsedCommand.WindowHandle,
+            MonitorHandle = parsedCommand.MonitorHandle
         };
 
         // Send command to service
@@ -116,9 +118,18 @@ class Program
         {
             case ResponseStatus.Success:
                 Console.WriteLine(response.Message);
+                
                 if (commandType == CommandType.CheckStatus)
                 {
                     Console.WriteLine($"Recording status: {(response.IsRecording ? "Active" : "Idle")}");
+                }
+                else if (commandType == CommandType.ListWindows)
+                {
+                    DisplayWindowsList(response);
+                }
+                else if (commandType == CommandType.ListMonitors)
+                {
+                    DisplayMonitorsList(response);
                 }
                 return 0;
 
@@ -139,6 +150,73 @@ class Program
                 Console.Error.WriteLine($"Unknown response status: {response.Status}");
                 return 1;
         }
+    }
+
+    private static void DisplayWindowsList(Response response)
+    {
+        if (!response.Data.TryGetValue("count", out var countStr) || !int.TryParse(countStr, out int count))
+        {
+            Console.WriteLine("No window data available");
+            return;
+        }
+
+        if (count == 0)
+        {
+            Console.WriteLine("No capturable windows found");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Available Windows:");
+        Console.WriteLine("==================");
+
+        for (int i = 0; i < count; i++)
+        {
+            var handle = response.Data.GetValueOrDefault($"window_{i}_handle", "N/A");
+            var title = response.Data.GetValueOrDefault($"window_{i}_title", "N/A");
+            var size = response.Data.GetValueOrDefault($"window_{i}_size", "N/A");
+
+            Console.WriteLine($"  {title}");
+            Console.WriteLine($"      Handle: {handle}");
+            Console.WriteLine($"      Size:   {size}");
+            Console.WriteLine();
+        }
+
+        Console.WriteLine($"To record a specific window, use: etwsnap start --window <handle>");
+    }
+
+    private static void DisplayMonitorsList(Response response)
+    {
+        if (!response.Data.TryGetValue("count", out var countStr) || !int.TryParse(countStr, out int count))
+        {
+            Console.WriteLine("No monitor data available");
+            return;
+        }
+
+        if (count == 0)
+        {
+            Console.WriteLine("No monitors found");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Available Monitors:");
+        Console.WriteLine("===================");
+
+        for (int i = 0; i < count; i++)
+        {
+            var handle = response.Data.GetValueOrDefault($"monitor_{i}_handle", "N/A");
+            var name = response.Data.GetValueOrDefault($"monitor_{i}_name", "N/A");
+            var bounds = response.Data.GetValueOrDefault($"monitor_{i}_bounds", "N/A");
+            var isPrimary = response.Data.GetValueOrDefault($"monitor_{i}_primary", "False") == "True";
+
+            Console.WriteLine($"  {name}{(isPrimary ? " (PRIMARY)" : "")}");
+            Console.WriteLine($"      Handle: {handle}");
+            Console.WriteLine($"      Bounds: {bounds}");
+            Console.WriteLine();
+        }
+
+        Console.WriteLine($"To record a specific monitor, use: etwsnap start --monitor <handle>");
     }
 }
 
