@@ -9,6 +9,7 @@ public class ParsedCommand
 {
     public CommandType Type { get; set; }
     public string? FilePath { get; set; }
+    public string? OutputFilePath { get; set; }
     public bool IsValid { get; set; }
     public string ErrorMessage { get; set; } = string.Empty;
     public bool IsClientSideOnly { get; set; } = false;
@@ -52,6 +53,7 @@ public class CommandParser : ICommandParser
             "provider-info" => ParseProviderInfoCommand(args),
             "list-windows" => ParseListWindowsCommand(args),
             "list-monitors" => ParseListMonitorsCommand(args),
+            "add-provider" => ParseAddProviderCommand(args),
             _ => new ParsedCommand
             {
                 IsValid = false,
@@ -266,6 +268,69 @@ public class CommandParser : ICommandParser
         };
     }
 
+    private ParsedCommand ParseAddProviderCommand(string[] args)
+    {
+        if (args.Length < 3)
+        {
+            return new ParsedCommand
+            {
+                IsValid = false,
+                ErrorMessage = "Add-provider command requires input and output WPRP file paths"
+            };
+        }
+
+        var inputFilePath = args[1];
+        var outputFilePath = args[2];
+        
+        // Basic validation for input file
+        if (string.IsNullOrWhiteSpace(inputFilePath))
+        {
+            return new ParsedCommand
+            {
+                IsValid = false,
+                ErrorMessage = "Input WPRP file path cannot be empty"
+            };
+        }
+
+        // Basic validation for output file
+        if (string.IsNullOrWhiteSpace(outputFilePath))
+        {
+            return new ParsedCommand
+            {
+                IsValid = false,
+                ErrorMessage = "Output WPRP file path cannot be empty"
+            };
+        }
+
+        // Check file extensions
+        if (!inputFilePath.EndsWith(".wprp", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ParsedCommand
+            {
+                IsValid = false,
+                ErrorMessage = "Input file must have .wprp extension"
+            };
+        }
+
+        if (!outputFilePath.EndsWith(".wprp", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ParsedCommand
+            {
+                IsValid = false,
+                ErrorMessage = "Output file must have .wprp extension"
+            };
+        }
+
+        return new ParsedCommand
+        {
+            Type = CommandType.CheckStatus, // Unused for client-side commands
+            FilePath = inputFilePath,
+            OutputFilePath = outputFilePath,
+            IsValid = true,
+            IsClientSideOnly = true
+        };
+    }
+
     private bool TryParseHandle(string value, out long handle)
     {
         handle = 0;
@@ -298,6 +363,7 @@ public class CommandParser : ICommandParser
         Console.WriteLine("  etwsnap list-windows             - List all capturable windows");
         Console.WriteLine("  etwsnap list-monitors            - List all available monitors");
         Console.WriteLine("  etwsnap provider-info            - Display ETW provider information");
+        Console.WriteLine("  etwsnap add-provider <input> <output> - Add ETWSnap provider to WPRP profile");
         Console.WriteLine();
         Console.WriteLine("Start Command Options:");
         Console.WriteLine("  --window <index>, -w <index>    - Capture a specific window (use list-windows to see indices)");
@@ -311,5 +377,6 @@ public class CommandParser : ICommandParser
         Console.WriteLine("  etwsnap list-monitors            - List available monitors");
         Console.WriteLine("  etwsnap stop recording.etl       - Stop and save recording");
         Console.WriteLine("  etwsnap cancel                   - Cancel without saving");
+        Console.WriteLine("  etwsnap add-provider input.wprp output.wprp - Add ETWSnap provider to WPR profile");
     }
 }

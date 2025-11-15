@@ -1,6 +1,7 @@
 ﻿using ETWSnap;
 using ETWSnap.Client;
 using ETWSnap.IPC;
+using ETWSnap.WPR;
 
 class Program
 {
@@ -54,6 +55,9 @@ class Program
             case "provider-info":
                 return ExecuteProviderInfo();
             
+            case "add-provider":
+                return ExecuteAddProvider(parsedCommand.FilePath!, parsedCommand.OutputFilePath!);
+            
             default:
                 Console.Error.WriteLine($"Unknown client-side command: {command}");
                 return 1;
@@ -73,6 +77,17 @@ class Program
         Console.WriteLine($"  <EventProvider Id=\"{ETWSnapConstants.ProviderName}\" Name=\"{ETWSnapConstants.ProviderGuid}\">");
         Console.WriteLine("  </EventProvider>");
         return 0;
+    }
+
+    private static int ExecuteAddProvider(string inputFilePath, string outputFilePath)
+    {
+        Console.WriteLine($"Reading profile from: {inputFilePath}");
+        Console.WriteLine($"Writing modified profile to: {outputFilePath}");
+        Console.WriteLine();
+        
+        bool success = WprpModifier.AddEtwSnapProviderToDefaultProfile(inputFilePath, outputFilePath);
+        
+        return success ? 0 : 1;
     }
 
     private static async Task<bool> EnsureServiceRunningAsync(IServiceManager serviceManager)
