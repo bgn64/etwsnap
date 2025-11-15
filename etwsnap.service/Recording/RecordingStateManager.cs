@@ -9,6 +9,7 @@ public class RecordingState
     public DateTime? StartTime { get; set; }
     public string? CurrentSessionId { get; set; }
     public RecordingStats? Stats { get; set; }
+    public bool IsUsingWpr { get; set; }
 }
 
 /// <summary>
@@ -57,7 +58,8 @@ public class RecordingStateManager : IRecordingStateManager
                 IsRecording = _state.IsRecording,
                 StartTime = _state.StartTime,
                 CurrentSessionId = _state.CurrentSessionId,
-                Stats = null // Stats only available after stopping
+                Stats = null, // Stats only available after stopping
+                IsUsingWpr = _state.IsUsingWpr
             };
         }
     }
@@ -89,11 +91,15 @@ public class RecordingStateManager : IRecordingStateManager
                 recordingOptions.MaxBufferSizeMB = 500;
             }
 
+            // Store WPR flag in state
+            _state.IsUsingWpr = recordingOptions.IsUsingWpr;
+
             if (!_screenRecorder.Start(recordingOptions))
             {
                 Console.WriteLine($"[StateManager] Failed to start screen recorder");
                 _state.StartTime = null;
                 _state.CurrentSessionId = null;
+                _state.IsUsingWpr = false;
                 return false;
             }
 
@@ -165,6 +171,7 @@ public class RecordingStateManager : IRecordingStateManager
             _state.IsRecording = false;
             _state.StartTime = null;
             _state.CurrentSessionId = null;
+            _state.IsUsingWpr = false;
 
             return true;
         }
@@ -192,6 +199,7 @@ public class RecordingStateManager : IRecordingStateManager
             _state.IsRecording = false;
             _state.StartTime = null;
             _state.CurrentSessionId = null;
+            _state.IsUsingWpr = false;
 
             return true;
         }

@@ -42,6 +42,11 @@ public class RecordingOptions
     public long JpegQuality { get; set; } = 90;
 
     /// <summary>
+    /// Whether WPR tracing is enabled for this session (default: false)
+    /// </summary>
+    public bool IsUsingWpr { get; set; } = false;
+
+    /// <summary>
     /// Gets the frame interval in milliseconds based on FPS
     /// </summary>
     public int FrameIntervalMs => 1000 / FramesPerSecond;

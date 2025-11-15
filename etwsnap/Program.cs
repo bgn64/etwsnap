@@ -23,23 +23,33 @@ class Program
 
         try
         {
-            // Handle client-side only commands
-            if (parsedCommand.IsClientSideOnly)
-            {
-                return ExecuteClientSideCommand(args[0].ToLowerInvariant(), parsedCommand);
-            }
-
-            // Ensure service is running for service-based commands
-            if (!await EnsureServiceRunningAsync(serviceManager))
+            // Determine command name for routing
+            string commandName = args[0].ToLowerInvariant();
+            
+            // Ensure service is running if this command requires it
+            bool needsService = RequiresService(commandName);
+            if (needsService && !await EnsureServiceRunningAsync(serviceManager))
             {
                 Console.Error.WriteLine("Failed to start or connect to service");
                 return 1;
             }
 
-            // Execute command
-            using var pipeClient = new NamedPipeClient();
-            var exitCode = await ExecuteCommandAsync(pipeClient, parsedCommand);
-            return exitCode;
+            // Create pipe client if needed (will be used by commands that need it)
+            using var pipeClient = needsService ? new NamedPipeClient() : null;
+
+            // Delegate to individual command handlers
+            return commandName switch
+            {
+                "provider-info" => await HandleProviderInfoCommand(parsedCommand),
+                "add-provider" => await HandleAddProviderCommand(parsedCommand),
+                "start" => await HandleStartCommand(pipeClient!, parsedCommand),
+                "stop" => await HandleStopCommand(pipeClient!, parsedCommand),
+                "cancel" => await HandleCancelCommand(pipeClient!, parsedCommand),
+                "status" => await HandleCheckStatusCommand(pipeClient!, parsedCommand),
+                "list-windows" => await HandleListWindowsCommand(pipeClient!, parsedCommand),
+                "list-monitors" => await HandleListMonitorsCommand(pipeClient!, parsedCommand),
+                _ => throw new InvalidOperationException($"Unhandled command: {commandName}")
+            };
         }
         catch (Exception ex)
         {
@@ -48,23 +58,19 @@ class Program
         }
     }
 
-    private static int ExecuteClientSideCommand(string command, ParsedCommand parsedCommand)
+    private static bool RequiresService(string commandName)
     {
-        switch (command)
+        return commandName switch
         {
-            case "provider-info":
-                return ExecuteProviderInfo();
-            
-            case "add-provider":
-                return ExecuteAddProvider(parsedCommand.FilePath!, parsedCommand.OutputFilePath!);
-            
-            default:
-                Console.Error.WriteLine($"Unknown client-side command: {command}");
-                return 1;
-        }
+            "provider-info" => false,
+            "add-provider" => false,
+            _ => true  // Most commands require the service
+        };
     }
 
-    private static int ExecuteProviderInfo()
+    // Command handlers
+
+    private static Task<int> HandleProviderInfoCommand(ParsedCommand parsedCommand)
     {
         Console.WriteLine("ETWSnap ETW Provider Information:");
         Console.WriteLine();
@@ -76,19 +82,129 @@ class Program
         Console.WriteLine("Example WPRP EventProvider definition:");
         Console.WriteLine($"  <EventProvider Id=\"{ETWSnapConstants.ProviderName}\" Name=\"{ETWSnapConstants.ProviderGuid}\">");
         Console.WriteLine("  </EventProvider>");
-        return 0;
+        return Task.FromResult(0);
     }
 
-    private static int ExecuteAddProvider(string inputFilePath, string outputFilePath)
+    private static Task<int> HandleAddProviderCommand(ParsedCommand parsedCommand)
     {
-        Console.WriteLine($"Reading profile from: {inputFilePath}");
-        Console.WriteLine($"Writing modified profile to: {outputFilePath}");
+        Console.WriteLine($"Reading profile from: {parsedCommand.FilePath}");
+        Console.WriteLine($"Writing modified profile to: {parsedCommand.OutputFilePath}");
         Console.WriteLine();
         
-        bool success = WprpModifier.AddEtwSnapProviderToDefaultProfile(inputFilePath, outputFilePath);
+        bool success = WprpModifier.AddEtwSnapProviderToDefaultProfile(parsedCommand.FilePath!, parsedCommand.OutputFilePath!);
         
-        return success ? 0 : 1;
+        return Task.FromResult(success ? 0 : 1);
     }
+
+    private static async Task<int> HandleStartCommand(IPipeClient pipeClient, ParsedCommand parsedCommand)
+    {
+        bool wprStarted = false;
+
+        // If WPRP path is provided, start WPR tracing first
+        if (!string.IsNullOrWhiteSpace(parsedCommand.WprpPath))
+        {
+            wprStarted = WprManager.Start(parsedCommand.WprpPath);
+            if (!wprStarted)
+            {
+                Console.Error.WriteLine("Failed to start WPR tracing. Aborting start command.");
+                return 1;
+            }
+        }
+
+        // Send start command to service
+        int result = await SendServiceCommand(pipeClient, parsedCommand);
+
+        // If service start failed and we started WPR, cancel it
+        if (result != 0 && wprStarted)
+        {
+            Console.WriteLine("Service start failed, cancelling WPR tracing...");
+            WprManager.Cancel();
+        }
+
+        return result;
+    }
+
+    private static async Task<int> HandleStopCommand(IPipeClient pipeClient, ParsedCommand parsedCommand)
+    {
+        // Send stop command to service
+        var request = new Request
+        {
+            Command = parsedCommand.Type,
+            FilePath = parsedCommand.FilePath,
+            WindowHandle = parsedCommand.WindowHandle,
+            MonitorHandle = parsedCommand.MonitorHandle,
+            IsUsingWpr = false  // Not used for stop command
+        };
+
+        var response = await pipeClient.SendCommandAsync(request);
+
+        // Handle response and stop WPR if needed
+        int result = HandleResponse(response, parsedCommand.Type);
+
+        // If stop was successful and WPR was used, stop WPR tracing
+        if (result == 0 && response.IsUsingWpr)
+        {
+            // Determine WPR output path
+            string wprOutputPath = GetWprOutputPath(parsedCommand.FilePath);
+            Console.WriteLine();
+            
+            if (!WprManager.Stop(wprOutputPath))
+            {
+                Console.Error.WriteLine("Warning: Failed to stop WPR tracing");
+                return 1;
+            }
+        }
+
+        return result;
+    }
+
+    private static async Task<int> HandleCancelCommand(IPipeClient pipeClient, ParsedCommand parsedCommand)
+    {
+        // Send cancel command to service
+        var request = new Request
+        {
+            Command = parsedCommand.Type,
+            FilePath = parsedCommand.FilePath,
+            WindowHandle = parsedCommand.WindowHandle,
+            MonitorHandle = parsedCommand.MonitorHandle,
+            IsUsingWpr = false  // Not used for cancel command
+        };
+
+        var response = await pipeClient.SendCommandAsync(request);
+
+        // Handle response and cancel WPR if needed
+        int result = HandleResponse(response, parsedCommand.Type);
+
+        // If cancel was successful and WPR was used, cancel WPR tracing
+        if (result == 0 && response.IsUsingWpr)
+        {
+            Console.WriteLine();
+            if (!WprManager.Cancel())
+            {
+                Console.Error.WriteLine("Warning: Failed to cancel WPR tracing");
+                return 1;
+            }
+        }
+
+        return result;
+    }
+
+    private static async Task<int> HandleCheckStatusCommand(IPipeClient pipeClient, ParsedCommand parsedCommand)
+    {
+        return await SendServiceCommand(pipeClient, parsedCommand);
+    }
+
+    private static async Task<int> HandleListWindowsCommand(IPipeClient pipeClient, ParsedCommand parsedCommand)
+    {
+        return await SendServiceCommand(pipeClient, parsedCommand);
+    }
+
+    private static async Task<int> HandleListMonitorsCommand(IPipeClient pipeClient, ParsedCommand parsedCommand)
+    {
+        return await SendServiceCommand(pipeClient, parsedCommand);
+    }
+
+    // Helper methods
 
     private static async Task<bool> EnsureServiceRunningAsync(IServiceManager serviceManager)
     {
@@ -109,7 +225,7 @@ class Program
         return true;
     }
 
-    private static async Task<int> ExecuteCommandAsync(IPipeClient pipeClient, ParsedCommand parsedCommand)
+    private static async Task<int> SendServiceCommand(IPipeClient pipeClient, ParsedCommand parsedCommand)
     {
         // Create request based on parsed command
         var request = new Request
@@ -117,7 +233,8 @@ class Program
             Command = parsedCommand.Type,
             FilePath = parsedCommand.FilePath,
             WindowHandle = parsedCommand.WindowHandle,
-            MonitorHandle = parsedCommand.MonitorHandle
+            MonitorHandle = parsedCommand.MonitorHandle,
+            IsUsingWpr = !string.IsNullOrWhiteSpace(parsedCommand.WprpPath)
         };
 
         // Send command to service
@@ -232,6 +349,30 @@ class Program
         }
 
         Console.WriteLine($"To record a specific monitor, use: etwsnap start --monitor <handle>");
+    }
+
+    private static string GetWprOutputPath(string? screenshotPath)
+    {
+        // Determine output directory from the screenshot path
+        string outputDirectory;
+        if (string.IsNullOrEmpty(screenshotPath))
+        {
+            outputDirectory = Environment.CurrentDirectory;
+        }
+        else if (Directory.Exists(screenshotPath))
+        {
+            outputDirectory = screenshotPath;
+        }
+        else
+        {
+            outputDirectory = Path.GetDirectoryName(screenshotPath) ?? Environment.CurrentDirectory;
+        }
+
+        // Generate ETL filename with timestamp
+        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        string etlFilename = $"etwsnap_trace_{timestamp}.etl";
+        
+        return Path.Combine(outputDirectory, etlFilename);
     }
 }
 

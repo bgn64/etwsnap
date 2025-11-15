@@ -15,6 +15,7 @@ public class ParsedCommand
     public bool IsClientSideOnly { get; set; } = false;
     public long WindowHandle { get; set; } = 0;
     public long MonitorHandle { get; set; } = 0;
+    public string? WprpPath { get; set; }
 }
 
 /// <summary>
@@ -74,6 +75,25 @@ public class CommandParser : ICommandParser
         for (int i = 1; i < args.Length; i++)
         {
             var arg = args[i];
+
+            // Check if this is a WPRP file path (first positional argument or file ending with .wprp)
+            if (!arg.StartsWith("-") && !arg.StartsWith("--"))
+            {
+                // This is a positional argument, treat it as WPRP path
+                if (!string.IsNullOrWhiteSpace(arg))
+                {
+                    if (!arg.EndsWith(".wprp", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new ParsedCommand
+                        {
+                            IsValid = false,
+                            ErrorMessage = "WPRP file path must have .wprp extension"
+                        };
+                    }
+                    result.WprpPath = arg;
+                }
+                continue;
+            }
 
             if (arg == "--window" || arg == "-w")
             {
@@ -356,7 +376,7 @@ public class CommandParser : ICommandParser
         Console.WriteLine("ETWSnap - ETW Recording Utility");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  etwsnap start [options]          - Start a new recording session");
+        Console.WriteLine("  etwsnap start [wprp] [options]   - Start a new recording session");
         Console.WriteLine("  etwsnap stop <filepath>          - Stop recording and save to file");
         Console.WriteLine("  etwsnap cancel                   - Cancel recording without saving");
         Console.WriteLine("  etwsnap status                   - Check recording status");
@@ -366,17 +386,19 @@ public class CommandParser : ICommandParser
         Console.WriteLine("  etwsnap add-provider <input> <output> - Add ETWSnap provider to WPRP profile");
         Console.WriteLine();
         Console.WriteLine("Start Command Options:");
+        Console.WriteLine("  [wprp]                          - Optional: WPRP profile path to start WPR tracing");
         Console.WriteLine("  --window <index>, -w <index>    - Capture a specific window (use list-windows to see indices)");
         Console.WriteLine("  --monitor <index>, -m <index>   - Capture a specific monitor (use list-monitors to see indices)");
         Console.WriteLine();
         Console.WriteLine("Examples:");
         Console.WriteLine("  etwsnap start                    - Start recording (captures primary monitor)");
-        Console.WriteLine("  etwsnap start -m 0x20001         - Start recording monitor with handle 0x20001");
+        Console.WriteLine("  etwsnap start profile.wprp       - Start recording with WPR tracing");
+        Console.WriteLine("  etwsnap start profile.wprp -m 0x20001 - Start with WPR, recording monitor 0x20001");
         Console.WriteLine("  etwsnap start -w 0x12345         - Start recording window with handle 0x12345");
         Console.WriteLine("  etwsnap list-windows             - List available windows");
         Console.WriteLine("  etwsnap list-monitors            - List available monitors");
-        Console.WriteLine("  etwsnap stop recording.etl       - Stop and save recording");
-        Console.WriteLine("  etwsnap cancel                   - Cancel without saving");
+        Console.WriteLine("  etwsnap stop C:\\traces           - Stop and save recording (WPR trace saved if enabled)");
+        Console.WriteLine("  etwsnap cancel                   - Cancel without saving (cancels WPR if enabled)");
         Console.WriteLine("  etwsnap add-provider input.wprp output.wprp - Add ETWSnap provider to WPR profile");
     }
 }

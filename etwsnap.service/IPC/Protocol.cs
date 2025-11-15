@@ -36,6 +36,7 @@ public class Request
     // Recording options for Start command (using long for JSON serialization)
     public long WindowHandle { get; set; } = 0;
     public long MonitorHandle { get; set; } = 0;
+    public bool IsUsingWpr { get; set; } = false;  // Whether WPR tracing is enabled
 }
 
 /// <summary>
@@ -47,4 +48,5 @@ public class Response
     public string Message { get; set; } = string.Empty;
     public bool IsRecording { get; set; }
     public Dictionary<string, string> Data { get; set; } = new();
+    public bool IsUsingWpr { get; set; } = false;  // Whether WPR tracing is enabled for this session
 }

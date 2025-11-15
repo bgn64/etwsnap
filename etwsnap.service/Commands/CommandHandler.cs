@@ -59,7 +59,8 @@ public class CommandHandler : ICommandHandler
                 var options = new RecordingOptions
                 {
                     WindowHandle = new IntPtr(request.WindowHandle),
-                    MonitorHandle = new IntPtr(request.MonitorHandle)
+                    MonitorHandle = new IntPtr(request.MonitorHandle),
+                    IsUsingWpr = request.IsUsingWpr
                 };        var success = _stateManager.StartRecording(options);
         
         if (success)
@@ -114,6 +115,9 @@ public class CommandHandler : ICommandHandler
             });
         }
 
+        // Get IsUsingWpr flag before stopping
+        var isUsingWpr = _stateManager.GetState().IsUsingWpr;
+        
         var success = _stateManager.StopRecording(request.FilePath);
         
         if (success)
@@ -122,7 +126,8 @@ public class CommandHandler : ICommandHandler
             {
                 Status = ResponseStatus.Success,
                 Message = $"Recording stopped and saved to: {request.FilePath}",
-                IsRecording = false
+                IsRecording = false,
+                IsUsingWpr = isUsingWpr
             });
         }
         else
@@ -131,7 +136,8 @@ public class CommandHandler : ICommandHandler
             {
                 Status = ResponseStatus.Error,
                 Message = "Failed to stop recording",
-                IsRecording = _stateManager.IsRecording
+                IsRecording = _stateManager.IsRecording,
+                IsUsingWpr = isUsingWpr
             });
         }
     }
@@ -148,6 +154,9 @@ public class CommandHandler : ICommandHandler
             });
         }
 
+        // Get IsUsingWpr flag before cancelling
+        var isUsingWpr = _stateManager.GetState().IsUsingWpr;
+        
         var success = _stateManager.CancelRecording();
         
         if (success)
@@ -156,7 +165,8 @@ public class CommandHandler : ICommandHandler
             {
                 Status = ResponseStatus.Success,
                 Message = "Recording cancelled successfully",
-                IsRecording = false
+                IsRecording = false,
+                IsUsingWpr = isUsingWpr
             });
         }
         else
@@ -165,7 +175,8 @@ public class CommandHandler : ICommandHandler
             {
                 Status = ResponseStatus.Error,
                 Message = "Failed to cancel recording",
-                IsRecording = _stateManager.IsRecording
+                IsRecording = _stateManager.IsRecording,
+                IsUsingWpr = isUsingWpr
             });
         }
     }
