@@ -9,6 +9,7 @@ namespace ETWSnap.WPR;
 public class WprpModifier
 {
     private const string EtwSnapCollectorId = "EventCollector_ETWSnap";
+    private const string EtwSnapEventProviderId = "EventProvider_ETWSnap";
 
     /// <summary>
     /// Adds the ETWSnap event provider to the default profile in a WPRP file
@@ -41,30 +42,55 @@ public class WprpModifier
                 return false;
             }
 
-            // Get or create the Collectors element
-            var collectorsElement = defaultProfile.Element(ns + "Collectors");
-            if (collectorsElement == null)
+            // First, add the EventCollector definition at the top level if it doesn't exist
+            if (!AddEventCollectorDefinition(doc, ns))
             {
-                Console.Error.WriteLine("Error: No Collectors element found in default profile");
+                Console.Error.WriteLine("Error: Failed to add EventCollector definition");
                 return false;
             }
 
-            // Check if ETWSnap collector already exists
-            var existingCollector = collectorsElement.Elements(ns + "EventCollectorId")
+            // Get or create the Collectors element in the profile
+            var collectorsElement = defaultProfile.Element(ns + "Collectors");
+            if (collectorsElement == null)
+            {
+                // Create Collectors element if it doesn't exist
+                collectorsElement = new XElement(ns + "Collectors");
+                defaultProfile.Add(collectorsElement);
+            }
+
+            // Check if ETWSnap collector reference already exists in the profile
+            var existingCollectorRef = collectorsElement.Elements(ns + "EventCollectorId")
                 .FirstOrDefault(e => e.Attribute("Value")?.Value == EtwSnapCollectorId);
 
-            if (existingCollector != null)
+            if (existingCollectorRef != null)
             {
                 Console.WriteLine($"ETWSnap provider already exists in profile '{defaultProfile.Attribute("Name")?.Value}'");
                 Console.WriteLine($"  EventCollectorId: {EtwSnapCollectorId}");
                 return true;
             }
 
-            // Create the new EventCollectorId element with inline provider
-            var newEventCollector = CreateEtwSnapEventCollector(ns);
+            // Create the EventCollectorId reference with inline EventProviders
+            var eventCollectorIdRef = new XElement(ns + "EventCollectorId",
+                new XAttribute("Value", EtwSnapCollectorId));
 
-            // Add the new EventCollectorId at the end of Collectors
-            collectorsElement.Add(newEventCollector);
+            // Create EventProviders container
+            var eventProviders = new XElement(ns + "EventProviders");
+
+            // Create inline EventProvider definition for ETWSnap
+            var eventProvider = new XElement(ns + "EventProvider",
+                new XAttribute("Id", EtwSnapEventProviderId),
+                new XAttribute("Name", ETWSnapConstants.ProviderGuid),
+                new XAttribute("NonPagedMemory", "true"),
+                new XAttribute("Level", "5"));
+
+            // Add the provider to the EventProviders collection
+            eventProviders.Add(eventProvider);
+
+            // Add EventProviders to EventCollectorId
+            eventCollectorIdRef.Add(eventProviders);
+
+            // Add the EventCollectorId reference to the profile's Collectors
+            collectorsElement.Add(eventCollectorIdRef);
 
             // Save the modified document to output file
             doc.Save(outputFilePath);
@@ -104,29 +130,72 @@ public class WprpModifier
     }
 
     /// <summary>
-    /// Creates an EventCollectorId element with inline ETWSnap provider definition
+    /// Adds the EventCollector definition to the top-level Profiles section if it doesn't already exist
+    /// </summary>
+    private static bool AddEventCollectorDefinition(XDocument doc, XNamespace ns)
+    {
+        var profilesElement = doc.Root?.Element(ns + "Profiles");
+        if (profilesElement == null)
+        {
+            Console.Error.WriteLine("Error: No Profiles element found in WPRP file");
+            return false;
+        }
+
+        // Check if ETWSnap EventCollector already exists
+        var existingCollector = profilesElement.Elements(ns + "EventCollector")
+            .FirstOrDefault(e => e.Attribute("Id")?.Value == EtwSnapCollectorId);
+
+        if (existingCollector != null)
+        {
+            Console.WriteLine($"EventCollector definition '{EtwSnapCollectorId}' already exists");
+            return true;
+        }
+
+        // Find the insertion point: after the last EventCollector, or after SystemCollector if no EventCollectors exist
+        XElement? insertAfter = profilesElement.Elements(ns + "EventCollector").LastOrDefault();
+        if (insertAfter == null)
+        {
+            // No EventCollectors exist, insert after the last SystemCollector
+            insertAfter = profilesElement.Elements(ns + "SystemCollector").LastOrDefault();
+        }
+
+        if (insertAfter == null)
+        {
+            Console.Error.WriteLine("Error: No SystemCollector or EventCollector found to insert after");
+            return false;
+        }
+
+        // Create the EventCollector definition
+        var eventCollector = CreateEtwSnapEventCollector(ns);
+
+        // Insert after the determined position
+        insertAfter.AddAfterSelf(eventCollector);
+
+        Console.WriteLine($"Added EventCollector definition '{EtwSnapCollectorId}' to WPRP file");
+        return true;
+    }
+
+    /// <summary>
+    /// Creates an EventCollector element (top-level definition without providers)
     /// </summary>
     private static XElement CreateEtwSnapEventCollector(XNamespace ns)
     {
-        // Create EventCollectorId element
-        var eventCollectorId = new XElement(ns + "EventCollectorId",
-            new XAttribute("Value", EtwSnapCollectorId));
+        // Create the EventCollector definition (providers go in the profile reference, not here)
+        var eventCollector = new XElement(ns + "EventCollector",
+            new XAttribute("Id", EtwSnapCollectorId),
+            new XAttribute("Name", "ETWSnap_EventCollector"),
+            new XAttribute("HostGuestCorrelation", "true"));
 
-        // Create EventProviders container
-        var eventProviders = new XElement(ns + "EventProviders");
+        // Add buffer configuration (10x the minimal settings for headroom)
+        // 0.9% of memory (~144 MB on 16GB system) - still lightweight compared to other collectors
+        eventCollector.Add(new XElement(ns + "BufferSize",
+            new XAttribute("Value", "256")));
+        
+        eventCollector.Add(new XElement(ns + "Buffers",
+            new XAttribute("Value", "0.9"),
+            new XAttribute("PercentageOfTotalMemory", "true"),
+            new XAttribute("MaximumBufferSpace", "20")));
 
-        // Create inline EventProvider definition for ETWSnap
-        // Following the pattern from the WPRP documentation for inline providers
-        var eventProvider = new XElement(ns + "EventProvider",
-            new XAttribute("Id", "EventProvider_ETWSnap"),
-            new XAttribute("Name", ETWSnapConstants.ProviderGuid));
-
-        // Add the provider to the EventProviders collection
-        eventProviders.Add(eventProvider);
-
-        // Add EventProviders to EventCollectorId
-        eventCollectorId.Add(eventProviders);
-
-        return eventCollectorId;
+        return eventCollector;
     }
 }

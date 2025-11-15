@@ -99,14 +99,33 @@ class Program
     private static async Task<int> HandleStartCommand(IPipeClient pipeClient, ParsedCommand parsedCommand)
     {
         bool wprStarted = false;
+        string? tempWprpPath = null;
 
         // If WPRP path is provided, start WPR tracing first
         if (!string.IsNullOrWhiteSpace(parsedCommand.WprpPath))
         {
-            wprStarted = WprManager.Start(parsedCommand.WprpPath);
+            // Create a modified copy of the WPRP with ETWSnap provider added
+            tempWprpPath = Path.Combine(Path.GetTempPath(), $"etwsnap_{Path.GetFileName(parsedCommand.WprpPath)}");
+            
+            Console.WriteLine($"Adding ETWSnap provider to profile: {parsedCommand.WprpPath}");
+            Console.WriteLine($"Creating temporary profile: {tempWprpPath}");
+            
+            bool modified = WprpModifier.AddEtwSnapProviderToDefaultProfile(parsedCommand.WprpPath, tempWprpPath);
+            if (!modified)
+            {
+                Console.Error.WriteLine("Failed to modify WPRP profile with ETWSnap provider. Aborting start command.");
+                return 1;
+            }
+            
+            Console.WriteLine();
+            
+            // Start WPR with the modified profile
+            wprStarted = WprManager.Start(tempWprpPath);
             if (!wprStarted)
             {
                 Console.Error.WriteLine("Failed to start WPR tracing. Aborting start command.");
+                // Clean up temp file
+                try { File.Delete(tempWprpPath); } catch { }
                 return 1;
             }
         }
@@ -119,6 +138,12 @@ class Program
         {
             Console.WriteLine("Service start failed, cancelling WPR tracing...");
             WprManager.Cancel();
+            
+            // Clean up temp file
+            if (tempWprpPath != null)
+            {
+                try { File.Delete(tempWprpPath); } catch { }
+            }
         }
 
         return result;
