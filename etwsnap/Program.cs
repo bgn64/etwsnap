@@ -23,8 +23,12 @@ class Program
 
         try
         {
-            // Determine command name for routing
+            // Determine command name for routing (strip leading dash if present)
             string commandName = args[0].ToLowerInvariant();
+            if (commandName.StartsWith("-"))
+            {
+                commandName = commandName.Substring(1);
+            }
             
             // Ensure service is running if this command requires it
             bool needsService = RequiresService(commandName);
@@ -259,7 +263,10 @@ class Program
             FilePath = parsedCommand.FilePath,
             WindowHandle = parsedCommand.WindowHandle,
             MonitorHandle = parsedCommand.MonitorHandle,
-            IsUsingWpr = !string.IsNullOrWhiteSpace(parsedCommand.WprpPath)
+            IsUsingWpr = !string.IsNullOrWhiteSpace(parsedCommand.WprpPath),
+            FramesPerSecond = parsedCommand.FramesPerSecond,
+            MaxBufferSizeMB = parsedCommand.MaxBufferSizeMB,
+            CaptureCursor = parsedCommand.CaptureCursor
         };
 
         // Send command to service

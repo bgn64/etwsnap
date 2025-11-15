@@ -37,6 +37,9 @@ public class Request
     public long WindowHandle { get; set; } = 0;
     public long MonitorHandle { get; set; } = 0;
     public bool IsUsingWpr { get; set; } = false;  // Whether WPR tracing is enabled
+    public int? FramesPerSecond { get; set; }
+    public long? MaxBufferSizeMB { get; set; }
+    public bool? CaptureCursor { get; set; }
 }
 
 /// <summary>

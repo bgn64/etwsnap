@@ -16,6 +16,9 @@ public class ParsedCommand
     public long WindowHandle { get; set; } = 0;
     public long MonitorHandle { get; set; } = 0;
     public string? WprpPath { get; set; }
+    public int? FramesPerSecond { get; set; }
+    public long? MaxBufferSizeMB { get; set; }
+    public bool? CaptureCursor { get; set; }
 }
 
 /// <summary>
@@ -47,14 +50,14 @@ public class CommandParser : ICommandParser
 
         return command switch
         {
-            "start" => ParseStartCommand(args),
-            "stop" => ParseStopCommand(args),
-            "cancel" => ParseCancelCommand(args),
-            "status" => ParseStatusCommand(args),
-            "provider-info" => ParseProviderInfoCommand(args),
-            "list-windows" => ParseListWindowsCommand(args),
-            "list-monitors" => ParseListMonitorsCommand(args),
-            "add-provider" => ParseAddProviderCommand(args),
+            "-start" or "start" => ParseStartCommand(args),
+            "-stop" or "stop" => ParseStopCommand(args),
+            "-cancel" or "cancel" => ParseCancelCommand(args),
+            "-status" or "status" => ParseStatusCommand(args),
+            "-provider-info" or "provider-info" => ParseProviderInfoCommand(args),
+            "-list-windows" or "list-windows" => ParseListWindowsCommand(args),
+            "-list-monitors" or "list-monitors" => ParseListMonitorsCommand(args),
+            "-add-provider" or "add-provider" => ParseAddProviderCommand(args),
             _ => new ParsedCommand
             {
                 IsValid = false,
@@ -140,6 +143,60 @@ public class CommandParser : ICommandParser
 
                 result.MonitorHandle = handle;
                 i++; // Skip next argument
+            }
+            else if (arg == "--fps")
+            {
+                if (i + 1 >= args.Length)
+                {
+                    return new ParsedCommand
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"{arg} requires a frames per second value"
+                    };
+                }
+
+                if (!int.TryParse(args[i + 1], out int fps) || fps <= 0 || fps > 120)
+                {
+                    return new ParsedCommand
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"Invalid FPS value: {args[i + 1]}. Must be between 1 and 120."
+                    };
+                }
+
+                result.FramesPerSecond = fps;
+                i++; // Skip next argument
+            }
+            else if (arg == "--buffer-size-mb" || arg == "-b")
+            {
+                if (i + 1 >= args.Length)
+                {
+                    return new ParsedCommand
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"{arg} requires a buffer size value in MB"
+                    };
+                }
+
+                if (!long.TryParse(args[i + 1], out long bufferSize) || bufferSize <= 0)
+                {
+                    return new ParsedCommand
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"Invalid buffer size: {args[i + 1]}. Must be a positive number."
+                    };
+                }
+
+                result.MaxBufferSizeMB = bufferSize;
+                i++; // Skip next argument
+            }
+            else if (arg == "--capture-cursor")
+            {
+                result.CaptureCursor = true;
+            }
+            else if (arg == "--no-capture-cursor")
+            {
+                result.CaptureCursor = false;
             }
             else
             {
@@ -376,29 +433,34 @@ public class CommandParser : ICommandParser
         Console.WriteLine("ETWSnap - ETW Recording Utility");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  etwsnap start [wprp] [options]   - Start a new recording session");
-        Console.WriteLine("  etwsnap stop <filepath>          - Stop recording and save to file");
-        Console.WriteLine("  etwsnap cancel                   - Cancel recording without saving");
-        Console.WriteLine("  etwsnap status                   - Check recording status");
-        Console.WriteLine("  etwsnap list-windows             - List all capturable windows");
-        Console.WriteLine("  etwsnap list-monitors            - List all available monitors");
-        Console.WriteLine("  etwsnap provider-info            - Display ETW provider information");
-        Console.WriteLine("  etwsnap add-provider <input> <output> - Add ETWSnap provider to WPRP profile");
+        Console.WriteLine("  etwsnap -start [wprp] [options]   - Start a new recording session");
+        Console.WriteLine("  etwsnap -stop <filepath>          - Stop recording and save to file");
+        Console.WriteLine("  etwsnap -cancel                   - Cancel recording without saving");
+        Console.WriteLine("  etwsnap -status                   - Check recording status");
+        Console.WriteLine("  etwsnap -list-windows             - List all capturable windows");
+        Console.WriteLine("  etwsnap -list-monitors            - List all available monitors");
+        Console.WriteLine("  etwsnap -provider-info            - Display ETW provider information");
+        Console.WriteLine("  etwsnap -add-provider <input> <output> - Add ETWSnap provider to WPRP profile");
         Console.WriteLine();
         Console.WriteLine("Start Command Options:");
-        Console.WriteLine("  [wprp]                          - Optional: WPRP profile path to start WPR tracing");
-        Console.WriteLine("  --window <index>, -w <index>    - Capture a specific window (use list-windows to see indices)");
-        Console.WriteLine("  --monitor <index>, -m <index>   - Capture a specific monitor (use list-monitors to see indices)");
+        Console.WriteLine("  [wprp]                           - Optional: WPRP profile path to start WPR tracing");
+        Console.WriteLine($"  --window <handle>, -w <handle>   - Capture a specific window (default: none)");
+        Console.WriteLine($"  --monitor <handle>, -m <handle>  - Capture a specific monitor (default: primary monitor)");
+        Console.WriteLine($"  --fps <value>                    - Frames per second (default: {ETWSnapConstants.DefaultFPS})");
+        Console.WriteLine($"  --buffer-size-mb <mb>, -b <mb>   - Max buffer size in MB (default: {ETWSnapConstants.DefaultBufferSizeMB})");
+        Console.WriteLine($"  --capture-cursor                 - Capture the cursor (default: {(ETWSnapConstants.DefaultCaptureCursor ? "enabled" : "disabled")})");
+        Console.WriteLine("  --no-capture-cursor              - Don't capture the cursor");
         Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine("  etwsnap start                    - Start recording (captures primary monitor)");
-        Console.WriteLine("  etwsnap start profile.wprp       - Start recording with WPR tracing");
-        Console.WriteLine("  etwsnap start profile.wprp -m 0x20001 - Start with WPR, recording monitor 0x20001");
-        Console.WriteLine("  etwsnap start -w 0x12345         - Start recording window with handle 0x12345");
-        Console.WriteLine("  etwsnap list-windows             - List available windows");
-        Console.WriteLine("  etwsnap list-monitors            - List available monitors");
-        Console.WriteLine("  etwsnap stop C:\\traces           - Stop and save recording (WPR trace saved if enabled)");
-        Console.WriteLine("  etwsnap cancel                   - Cancel without saving (cancels WPR if enabled)");
-        Console.WriteLine("  etwsnap add-provider input.wprp output.wprp - Add ETWSnap provider to WPR profile");
+        Console.WriteLine("  etwsnap -start                    - Start recording (captures primary monitor)");
+        Console.WriteLine("  etwsnap -start profile.wprp       - Start recording with WPR tracing");
+        Console.WriteLine("  etwsnap -start --fps 60 -b 1000   - Start with 60 FPS and 1GB buffer");
+        Console.WriteLine("  etwsnap -start -m 0x20001 --no-capture-cursor - Record monitor without cursor");
+        Console.WriteLine("  etwsnap -start -w 0x12345         - Start recording window with handle 0x12345");
+        Console.WriteLine("  etwsnap -list-windows             - List available windows");
+        Console.WriteLine("  etwsnap -list-monitors            - List available monitors");
+        Console.WriteLine("  etwsnap -stop C:\\traces           - Stop and save recording (WPR trace saved if enabled)");
+        Console.WriteLine("  etwsnap -cancel                   - Cancel without saving (cancels WPR if enabled)");
+        Console.WriteLine("  etwsnap -add-provider input.wprp output.wprp - Add ETWSnap provider to WPR profile");
     }
 }

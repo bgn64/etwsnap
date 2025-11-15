@@ -61,7 +61,23 @@ public class CommandHandler : ICommandHandler
                     WindowHandle = new IntPtr(request.WindowHandle),
                     MonitorHandle = new IntPtr(request.MonitorHandle),
                     IsUsingWpr = request.IsUsingWpr
-                };        var success = _stateManager.StartRecording(options);
+                };
+        
+        // Apply optional recording parameters if provided
+        if (request.FramesPerSecond.HasValue)
+        {
+            options.FramesPerSecond = request.FramesPerSecond.Value;
+        }
+        if (request.MaxBufferSizeMB.HasValue)
+        {
+            options.MaxBufferSizeMB = request.MaxBufferSizeMB.Value;
+        }
+        if (request.CaptureCursor.HasValue)
+        {
+            options.CaptureCursor = request.CaptureCursor.Value;
+        }
+        
+        var success = _stateManager.StartRecording(options);
         
         if (success)
         {
