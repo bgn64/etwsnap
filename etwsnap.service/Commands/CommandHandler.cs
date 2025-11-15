@@ -25,7 +25,7 @@ public class CommandHandler : ICommandHandler
 
     public Task<Response> HandleCommandAsync(Request request)
     {
-        Console.WriteLine($"[CommandHandler] Received command: {request.Command}");
+        Logger.Info($"[CommandHandler] Received command: {request.Command}");
 
         return request.Command switch
         {

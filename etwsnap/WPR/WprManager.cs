@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using ETWSnap;
 
 namespace ETWSnap.WPR;
 
@@ -22,11 +23,11 @@ public static class WprManager
 
         if (!File.Exists(wprpPath))
         {
-            Console.Error.WriteLine($"WPR: WPRP file not found: {wprpPath}");
+            Logger.Error($"WPR: WPRP file not found: {wprpPath}");
             return false;
         }
 
-        Console.WriteLine($"Starting WPR tracing with profile: {wprpPath}");
+        Logger.Info($"Starting WPR tracing with profile: {wprpPath}");
 
         try
         {
@@ -54,29 +55,29 @@ public static class WprManager
 
             if (process.ExitCode != 0)
             {
-                Console.Error.WriteLine($"WPR: Failed to start tracing (exit code {process.ExitCode})");
+                Logger.Error($"WPR: Failed to start tracing (exit code {process.ExitCode})");
                 if (!string.IsNullOrWhiteSpace(error))
                 {
-                    Console.Error.WriteLine($"WPR Error: {error}");
+                    Logger.Error($"WPR Error: {error}");
                 }
                 if (!string.IsNullOrWhiteSpace(output))
                 {
-                    Console.Error.WriteLine($"WPR Output: {output}");
+                    Logger.Error($"WPR Output: {output}");
                 }
                 return false;
             }
 
             if (!string.IsNullOrWhiteSpace(output))
             {
-                Console.WriteLine($"WPR: {output}");
+                Logger.Info($"WPR: {output}");
             }
 
-            Console.WriteLine("WPR tracing started successfully");
+            Logger.Info("WPR tracing started successfully");
             return true;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"WPR: Exception while starting tracing: {ex.Message}");
+            Logger.Error($"WPR: Exception while starting tracing: {ex.Message}");
             return false;
         }
     }
@@ -90,11 +91,11 @@ public static class WprManager
     {
         if (string.IsNullOrWhiteSpace(outputPath))
         {
-            Console.Error.WriteLine("WPR: Output path cannot be empty");
+            Logger.Error("WPR: Output path cannot be empty");
             return false;
         }
 
-        Console.WriteLine($"Stopping WPR tracing and saving to: {outputPath}");
+        Logger.Info($"Stopping WPR tracing and saving to: {outputPath}");
 
         try
         {
@@ -111,7 +112,7 @@ public static class WprManager
             using var process = Process.Start(startInfo);
             if (process == null)
             {
-                Console.Error.WriteLine("WPR: Failed to start wpr.exe process");
+                Logger.Error("WPR: Failed to start wpr.exe process");
                 return false;
             }
 
@@ -122,29 +123,29 @@ public static class WprManager
 
             if (process.ExitCode != 0)
             {
-                Console.Error.WriteLine($"WPR: Failed to stop tracing (exit code {process.ExitCode})");
+                Logger.Error($"WPR: Failed to stop tracing (exit code {process.ExitCode})");
                 if (!string.IsNullOrWhiteSpace(error))
                 {
-                    Console.Error.WriteLine($"WPR Error: {error}");
+                    Logger.Error($"WPR Error: {error}");
                 }
                 if (!string.IsNullOrWhiteSpace(output))
                 {
-                    Console.Error.WriteLine($"WPR Output: {output}");
+                    Logger.Error($"WPR Output: {output}");
                 }
                 return false;
             }
 
             if (!string.IsNullOrWhiteSpace(output))
             {
-                Console.WriteLine($"WPR: {output}");
+                Logger.Info($"WPR: {output}");
             }
 
-            Console.WriteLine($"WPR trace saved to: {outputPath}");
+            Logger.Info($"WPR trace saved to: {outputPath}");
             return true;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"WPR: Exception while stopping tracing: {ex.Message}");
+            Logger.Error($"WPR: Exception while stopping tracing: {ex.Message}");
             return false;
         }
     }
@@ -155,7 +156,7 @@ public static class WprManager
     /// <returns>True if WPR cancelled successfully, false otherwise</returns>
     public static bool Cancel()
     {
-        Console.WriteLine("Cancelling WPR tracing...");
+        Logger.Info("Cancelling WPR tracing...");
 
         try
         {
@@ -172,7 +173,7 @@ public static class WprManager
             using var process = Process.Start(startInfo);
             if (process == null)
             {
-                Console.Error.WriteLine("WPR: Failed to start wpr.exe process");
+                Logger.Error("WPR: Failed to start wpr.exe process");
                 return false;
             }
 
@@ -183,29 +184,29 @@ public static class WprManager
 
             if (process.ExitCode != 0)
             {
-                Console.Error.WriteLine($"WPR: Failed to cancel tracing (exit code {process.ExitCode})");
+                Logger.Error($"WPR: Failed to cancel tracing (exit code {process.ExitCode})");
                 if (!string.IsNullOrWhiteSpace(error))
                 {
-                    Console.Error.WriteLine($"WPR Error: {error}");
+                    Logger.Error($"WPR Error: {error}");
                 }
                 if (!string.IsNullOrWhiteSpace(output))
                 {
-                    Console.Error.WriteLine($"WPR Output: {output}");
+                    Logger.Error($"WPR Output: {output}");
                 }
                 return false;
             }
 
             if (!string.IsNullOrWhiteSpace(output))
             {
-                Console.WriteLine($"WPR: {output}");
+                Logger.Info($"WPR: {output}");
             }
 
-            Console.WriteLine("WPR tracing cancelled successfully");
+            Logger.Info("WPR tracing cancelled successfully");
             return true;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"WPR: Exception while cancelling tracing: {ex.Message}");
+            Logger.Error($"WPR: Exception while cancelling tracing: {ex.Message}");
             return false;
         }
     }

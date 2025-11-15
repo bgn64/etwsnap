@@ -1,4 +1,5 @@
-﻿using ETWSnap.Service.IPC;
+﻿using ETWSnap.Service;
+using ETWSnap.Service.IPC;
 using ETWSnap.Service.Recording;
 using ETWSnap.Service.Commands;
 
@@ -6,7 +7,11 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        Console.WriteLine("ETWSnap Service starting...");
+        // Check for verbose flag
+        bool verboseMode = args.Contains("--verbose") || args.Contains("-v");
+        Logger.VerboseEnabled = verboseMode;
+
+        Logger.Info("ETWSnap Service starting...");
 
         // Initialize components
         var screenRecorder = new ScreenRecorder();
@@ -19,15 +24,15 @@ class Program
         Console.CancelKeyPress += (sender, e) =>
         {
             e.Cancel = true;
-            Console.WriteLine("\nShutdown requested...");
+            Logger.Info("\nShutdown requested...");
             cts.Cancel();
         };
 
         try
         {
-            Console.WriteLine("ETWSnap Service started successfully");
-            Console.WriteLine("Listening for commands on named pipe...");
-            Console.WriteLine("Press Ctrl+C to stop the service");
+            Logger.Info("ETWSnap Service started successfully");
+            Logger.Info("Listening for commands on named pipe...");
+            Logger.Info("Press Ctrl+C to stop the service");
 
             // Start listening for commands
             await pipeServer.StartAsync(
@@ -36,11 +41,11 @@ class Program
         }
         catch (OperationCanceledException)
         {
-            Console.WriteLine("Service shutdown completed");
+            Logger.Info("Service shutdown completed");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Service error: {ex.Message}");
+            Logger.Error($"Service error: {ex.Message}");
             Environment.Exit(1);
         }
         finally

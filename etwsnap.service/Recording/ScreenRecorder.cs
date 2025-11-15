@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using ETWSnap.Service;
 
 namespace ETWSnap.Service.Recording;
 
@@ -47,7 +48,7 @@ public class ScreenRecorder : IScreenRecorder
         {
             if (_isRecording)
             {
-                Console.WriteLine("[ScreenRecorder] Already recording");
+                Logger.Info("[ScreenRecorder] Already recording");
                 return false;
             }
 
@@ -66,39 +67,39 @@ public class ScreenRecorder : IScreenRecorder
             if (_options.MonitorHandle != IntPtr.Zero)
             {
                 // Capture specified monitor
-                Console.WriteLine($"[ScreenRecorder] Capturing monitor handle: 0x{_options.MonitorHandle:X}");
+                Logger.Info($"[ScreenRecorder] Capturing monitor handle: 0x{_options.MonitorHandle:X}");
                 _captureHandle = ScreenCaptureInterop.Capture_CreateForMonitor(_options.MonitorHandle, _options.FrameIntervalMs, maxFrames);
             }
             else if (_options.WindowHandle != IntPtr.Zero)
             {
                 // Capture specified window
-                Console.WriteLine($"[ScreenRecorder] Capturing window handle: 0x{_options.WindowHandle:X}");
+                Logger.Info($"[ScreenRecorder] Capturing window handle: 0x{_options.WindowHandle:X}");
                 _captureHandle = ScreenCaptureInterop.Capture_Create(_options.WindowHandle, _options.FrameIntervalMs, maxFrames);
             }
             else
             {
                 // Capture primary monitor by default
                 var primaryMonitor = GetPrimaryMonitor();
-                Console.WriteLine($"[ScreenRecorder] Capturing primary monitor: 0x{primaryMonitor:X}");
+                Logger.Info($"[ScreenRecorder] Capturing primary monitor: 0x{primaryMonitor:X}");
                 _captureHandle = ScreenCaptureInterop.Capture_CreateForMonitor(primaryMonitor, _options.FrameIntervalMs, maxFrames);
             }
 
             if (_captureHandle == IntPtr.Zero)
             {
-                Console.WriteLine("[ScreenRecorder] Failed to create capture manager");
+                Logger.Info("[ScreenRecorder] Failed to create capture manager");
                 return false;
             }
 
-            Console.WriteLine($"[ScreenRecorder] Capture created successfully (FPS: {_options.FramesPerSecond}, Buffer: {maxFrames} frames)");
+            Logger.Info($"[ScreenRecorder] Capture created successfully (FPS: {_options.FramesPerSecond}, Buffer: {maxFrames} frames)");
 
             // Configure cursor capture
             ScreenCaptureInterop.Capture_SetCursorEnabled(_captureHandle, _options.CaptureCursor);
-            Console.WriteLine($"[ScreenRecorder] Cursor capture: {_options.CaptureCursor}");
+            Logger.Info($"[ScreenRecorder] Cursor capture: {_options.CaptureCursor}");
 
             // Start capturing
             if (!ScreenCaptureInterop.Capture_Start(_captureHandle))
             {
-                Console.WriteLine("[ScreenRecorder] Failed to start capture");
+                Logger.Info("[ScreenRecorder] Failed to start capture");
                 ScreenCaptureInterop.Capture_Destroy(_captureHandle);
                 _captureHandle = IntPtr.Zero;
                 return false;
@@ -108,7 +109,7 @@ public class ScreenRecorder : IScreenRecorder
             _startTime = DateTime.UtcNow;
             _sessionId = Guid.NewGuid().ToString();
             
-            Console.WriteLine("[ScreenRecorder] Recording started successfully");
+            Logger.Info("[ScreenRecorder] Recording started successfully");
             return true;
         }
     }
@@ -124,7 +125,7 @@ public class ScreenRecorder : IScreenRecorder
                 return frames;
             }
 
-            Console.WriteLine("[ScreenRecorder] Stopping recording...");
+            Logger.Info("[ScreenRecorder] Stopping recording...");
 
             if (_captureHandle != IntPtr.Zero)
             {
@@ -133,7 +134,7 @@ public class ScreenRecorder : IScreenRecorder
                 // Retrieve frames from native buffer
                 if (ScreenCaptureInterop.Capture_GetFrames(_captureHandle, out IntPtr framesPtr, out int frameCount))
                 {
-                    Console.WriteLine($"[ScreenRecorder] Retrieved {frameCount} frames from native buffer");
+                    Logger.Info($"[ScreenRecorder] Retrieved {frameCount} frames from native buffer");
 
                     if (frameCount > 0 && framesPtr != IntPtr.Zero)
                     {
@@ -172,7 +173,7 @@ public class ScreenRecorder : IScreenRecorder
 
             var duration = _startTime.HasValue ? DateTime.UtcNow - _startTime.Value : TimeSpan.Zero;
             
-            Console.WriteLine($"[ScreenRecorder] Recording stopped. Total frames: {frames.Count}, Duration: {duration:mm\\:ss\\.fff}");
+            Logger.Info($"[ScreenRecorder] Recording stopped. Total frames: {frames.Count}, Duration: {duration:mm\\:ss\\.fff}");
             return frames;
         }
     }

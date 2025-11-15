@@ -64,8 +64,8 @@ public class WprpModifier
 
             if (existingCollectorRef != null)
             {
-                Console.WriteLine($"ETWSnap provider already exists in profile '{defaultProfile.Attribute("Name")?.Value}'");
-                Console.WriteLine($"  EventCollectorId: {EtwSnapCollectorId}");
+                Logger.Info($"ETWSnap provider already exists in profile '{defaultProfile.Attribute("Name")?.Value}'");
+                Logger.Info($"  EventCollectorId: {EtwSnapCollectorId}");
                 return true;
             }
 
@@ -95,10 +95,10 @@ public class WprpModifier
             // Save the modified document to output file
             doc.Save(outputFilePath);
 
-            Console.WriteLine($"Successfully added ETWSnap provider to profile '{defaultProfile.Attribute("Name")?.Value}'");
-            Console.WriteLine($"  EventCollectorId: {EtwSnapCollectorId}");
-            Console.WriteLine($"  Provider Name: {ETWSnapConstants.ProviderName}");
-            Console.WriteLine($"  Provider GUID: {ETWSnapConstants.ProviderGuid}");
+            Logger.Info($"Successfully added ETWSnap provider to profile '{defaultProfile.Attribute("Name")?.Value}'");
+            Logger.Info($"  EventCollectorId: {EtwSnapCollectorId}");
+            Logger.Info($"  Provider Name: {ETWSnapConstants.ProviderName}");
+            Logger.Info($"  Provider GUID: {ETWSnapConstants.ProviderGuid}");
 
             return true;
         }
@@ -147,7 +147,7 @@ public class WprpModifier
 
         if (existingCollector != null)
         {
-            Console.WriteLine($"EventCollector definition '{EtwSnapCollectorId}' already exists");
+            Logger.Info($"EventCollector definition '{EtwSnapCollectorId}' already exists");
             return true;
         }
 
@@ -171,7 +171,7 @@ public class WprpModifier
         // Insert after the determined position
         insertAfter.AddAfterSelf(eventCollector);
 
-        Console.WriteLine($"Added EventCollector definition '{EtwSnapCollectorId}' to WPRP file");
+        Logger.Info($"Added EventCollector definition '{EtwSnapCollectorId}' to WPRP file");
         return true;
     }
 

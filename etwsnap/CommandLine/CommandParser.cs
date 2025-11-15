@@ -19,6 +19,7 @@ public class ParsedCommand
     public int? FramesPerSecond { get; set; }
     public long? MaxBufferSizeMB { get; set; }
     public bool? CaptureCursor { get; set; }
+    public bool VerboseMode { get; set; } = false;
 }
 
 /// <summary>
@@ -48,7 +49,7 @@ public class CommandParser : ICommandParser
 
         var command = args[0].ToLowerInvariant();
 
-        return command switch
+        var result = command switch
         {
             "-start" or "start" => ParseStartCommand(args),
             "-stop" or "stop" => ParseStopCommand(args),
@@ -64,6 +65,26 @@ public class CommandParser : ICommandParser
                 ErrorMessage = $"Unknown command: {command}"
             }
         };
+
+        // Check for global --verbose/-v flag anywhere in args
+        if (result.IsValid)
+        {
+            result.VerboseMode = HasVerboseFlag(args);
+        }
+
+        return result;
+    }
+
+    private bool HasVerboseFlag(string[] args)
+    {
+        foreach (var arg in args)
+        {
+            if (arg == "--verbose" || arg == "-v")
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ParsedCommand ParseStartCommand(string[] args)
@@ -198,6 +219,10 @@ public class CommandParser : ICommandParser
             {
                 result.CaptureCursor = false;
             }
+            else if (arg == "--verbose" || arg == "-v")
+            {
+                // Handled globally in Parse method, skip here
+            }
             else
             {
                 return new ParsedCommand
@@ -256,13 +281,17 @@ public class CommandParser : ICommandParser
 
     private ParsedCommand ParseCancelCommand(string[] args)
     {
-        if (args.Length > 1)
+        // Allow --verbose/-v flag
+        foreach (var arg in args.Skip(1))
         {
-            return new ParsedCommand
+            if (arg != "--verbose" && arg != "-v")
             {
-                IsValid = false,
-                ErrorMessage = "Cancel command does not accept additional arguments"
-            };
+                return new ParsedCommand
+                {
+                    IsValid = false,
+                    ErrorMessage = $"Unknown parameter: {arg}"
+                };
+            }
         }
 
         return new ParsedCommand
@@ -274,13 +303,17 @@ public class CommandParser : ICommandParser
 
     private ParsedCommand ParseStatusCommand(string[] args)
     {
-        if (args.Length > 1)
+        // Allow --verbose/-v flag
+        foreach (var arg in args.Skip(1))
         {
-            return new ParsedCommand
+            if (arg != "--verbose" && arg != "-v")
             {
-                IsValid = false,
-                ErrorMessage = "Status command does not accept additional arguments"
-            };
+                return new ParsedCommand
+                {
+                    IsValid = false,
+                    ErrorMessage = $"Unknown parameter: {arg}"
+                };
+            }
         }
 
         return new ParsedCommand
@@ -292,13 +325,17 @@ public class CommandParser : ICommandParser
 
     private ParsedCommand ParseProviderInfoCommand(string[] args)
     {
-        if (args.Length > 1)
+        // Allow --verbose/-v flag
+        foreach (var arg in args.Skip(1))
         {
-            return new ParsedCommand
+            if (arg != "--verbose" && arg != "-v")
             {
-                IsValid = false,
-                ErrorMessage = "Provider-info command does not accept additional arguments"
-            };
+                return new ParsedCommand
+                {
+                    IsValid = false,
+                    ErrorMessage = $"Unknown parameter: {arg}"
+                };
+            }
         }
 
         return new ParsedCommand
@@ -311,13 +348,17 @@ public class CommandParser : ICommandParser
 
     private ParsedCommand ParseListWindowsCommand(string[] args)
     {
-        if (args.Length > 1)
+        // Allow --verbose/-v flag
+        foreach (var arg in args.Skip(1))
         {
-            return new ParsedCommand
+            if (arg != "--verbose" && arg != "-v")
             {
-                IsValid = false,
-                ErrorMessage = "List-windows command does not accept additional arguments"
-            };
+                return new ParsedCommand
+                {
+                    IsValid = false,
+                    ErrorMessage = $"Unknown parameter: {arg}"
+                };
+            }
         }
 
         return new ParsedCommand
@@ -329,13 +370,17 @@ public class CommandParser : ICommandParser
 
     private ParsedCommand ParseListMonitorsCommand(string[] args)
     {
-        if (args.Length > 1)
+        // Allow --verbose/-v flag
+        foreach (var arg in args.Skip(1))
         {
-            return new ParsedCommand
+            if (arg != "--verbose" && arg != "-v")
             {
-                IsValid = false,
-                ErrorMessage = "List-monitors command does not accept additional arguments"
-            };
+                return new ParsedCommand
+                {
+                    IsValid = false,
+                    ErrorMessage = $"Unknown parameter: {arg}"
+                };
+            }
         }
 
         return new ParsedCommand
@@ -442,6 +487,9 @@ public class CommandParser : ICommandParser
         Console.WriteLine("  etwsnap -provider-info            - Display ETW provider information");
         Console.WriteLine("  etwsnap -add-provider <input> <output> - Add ETWSnap provider to WPRP profile");
         Console.WriteLine();
+        Console.WriteLine("Global Options:");
+        Console.WriteLine("  --verbose, -v                    - Enable verbose output");
+        Console.WriteLine();
         Console.WriteLine("Start Command Options:");
         Console.WriteLine("  [wprp]                           - Optional: WPRP profile path to start WPR tracing");
         Console.WriteLine($"  --window <handle>, -w <handle>   - Capture a specific window (default: none)");
@@ -453,10 +501,10 @@ public class CommandParser : ICommandParser
         Console.WriteLine();
         Console.WriteLine("Examples:");
         Console.WriteLine("  etwsnap -start                    - Start recording (captures primary monitor)");
-        Console.WriteLine("  etwsnap -start profile.wprp       - Start recording with WPR tracing");
+        Console.WriteLine("  etwsnap -start profile.wprp -v    - Start recording with WPR tracing (verbose)");
         Console.WriteLine("  etwsnap -start --fps 60 -b 1000   - Start with 60 FPS and 1GB buffer");
         Console.WriteLine("  etwsnap -start -m 0x20001 --no-capture-cursor - Record monitor without cursor");
-        Console.WriteLine("  etwsnap -start -w 0x12345         - Start recording window with handle 0x12345");
+        Console.WriteLine("  etwsnap -start -w 0x12345 -v      - Start recording window with handle 0x12345 (verbose)");
         Console.WriteLine("  etwsnap -list-windows             - List available windows");
         Console.WriteLine("  etwsnap -list-monitors            - List available monitors");
         Console.WriteLine("  etwsnap -stop C:\\traces           - Stop and save recording (WPR trace saved if enabled)");

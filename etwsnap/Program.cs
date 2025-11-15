@@ -21,6 +21,9 @@ class Program
             return 1;
         }
 
+        // Initialize logger with verbose mode setting
+        Logger.VerboseEnabled = parsedCommand.VerboseMode;
+
         try
         {
             // Determine command name for routing (strip leading dash if present)
@@ -76,24 +79,24 @@ class Program
 
     private static Task<int> HandleProviderInfoCommand(ParsedCommand parsedCommand)
     {
-        Console.WriteLine("ETWSnap ETW Provider Information:");
-        Console.WriteLine();
-        Console.WriteLine($"Provider Name: {ETWSnapConstants.ProviderName}");
-        Console.WriteLine($"Provider GUID: {ETWSnapConstants.ProviderGuid}");
-        Console.WriteLine();
-        Console.WriteLine("Use this information when configuring ETW tracing tools like WPR or PerfView.");
-        Console.WriteLine();
-        Console.WriteLine("Example WPRP EventProvider definition:");
-        Console.WriteLine($"  <EventProvider Id=\"{ETWSnapConstants.ProviderName}\" Name=\"{ETWSnapConstants.ProviderGuid}\">");
-        Console.WriteLine("  </EventProvider>");
+        Logger.Output("ETWSnap ETW Provider Information:");
+        Logger.OutputLine();
+        Logger.Output($"Provider Name: {ETWSnapConstants.ProviderName}");
+        Logger.Output($"Provider GUID: {ETWSnapConstants.ProviderGuid}");
+        Logger.OutputLine();
+        Logger.Output("Use this information when configuring ETW tracing tools like WPR or PerfView.");
+        Logger.OutputLine();
+        Logger.Output("Example WPRP EventProvider definition:");
+        Logger.Output($"  <EventProvider Id=\"{ETWSnapConstants.ProviderName}\" Name=\"{ETWSnapConstants.ProviderGuid}\">");
+        Logger.Output("  </EventProvider>");
         return Task.FromResult(0);
     }
 
     private static Task<int> HandleAddProviderCommand(ParsedCommand parsedCommand)
     {
-        Console.WriteLine($"Reading profile from: {parsedCommand.FilePath}");
-        Console.WriteLine($"Writing modified profile to: {parsedCommand.OutputFilePath}");
-        Console.WriteLine();
+        Logger.Info($"Reading profile from: {parsedCommand.FilePath}");
+        Logger.Info($"Writing modified profile to: {parsedCommand.OutputFilePath}");
+        Logger.InfoLine();
         
         bool success = WprpModifier.AddEtwSnapProviderToDefaultProfile(parsedCommand.FilePath!, parsedCommand.OutputFilePath!);
         
@@ -111,8 +114,8 @@ class Program
             // Create a modified copy of the WPRP with ETWSnap provider added
             tempWprpPath = Path.Combine(Path.GetTempPath(), $"etwsnap_{Path.GetFileName(parsedCommand.WprpPath)}");
             
-            Console.WriteLine($"Adding ETWSnap provider to profile: {parsedCommand.WprpPath}");
-            Console.WriteLine($"Creating temporary profile: {tempWprpPath}");
+            Logger.Info($"Adding ETWSnap provider to profile: {parsedCommand.WprpPath}");
+            Logger.Info($"Creating temporary profile: {tempWprpPath}");
             
             bool modified = WprpModifier.AddEtwSnapProviderToDefaultProfile(parsedCommand.WprpPath, tempWprpPath);
             if (!modified)
@@ -121,7 +124,7 @@ class Program
                 return 1;
             }
             
-            Console.WriteLine();
+            Logger.InfoLine();
             
             // Start WPR with the modified profile
             wprStarted = WprManager.Start(tempWprpPath);
@@ -140,7 +143,7 @@ class Program
         // If service start failed and we started WPR, cancel it
         if (result != 0 && wprStarted)
         {
-            Console.WriteLine("Service start failed, cancelling WPR tracing...");
+            Logger.Info("Service start failed, cancelling WPR tracing...");
             WprManager.Cancel();
             
             // Clean up temp file
@@ -175,7 +178,7 @@ class Program
         {
             // Determine WPR output path
             string wprOutputPath = GetWprOutputPath(parsedCommand.FilePath);
-            Console.WriteLine();
+            Logger.InfoLine();
             
             if (!WprManager.Stop(wprOutputPath))
             {
@@ -207,7 +210,7 @@ class Program
         // If cancel was successful and WPR was used, cancel WPR tracing
         if (result == 0 && response.IsUsingWpr)
         {
-            Console.WriteLine();
+            Logger.InfoLine();
             if (!WprManager.Cancel())
             {
                 Console.Error.WriteLine("Warning: Failed to cancel WPR tracing");
@@ -243,14 +246,14 @@ class Program
             return true;
         }
 
-        Console.WriteLine("Service not running, starting...");
+        Logger.Info("Service not running, starting...");
         
-        if (!await serviceManager.StartServiceAsync())
+        if (!await serviceManager.StartServiceAsync(Logger.VerboseEnabled))
         {
             return false;
         }
 
-        Console.WriteLine("Service started successfully");
+        Logger.Info("Service started successfully");
         return true;
     }
 
@@ -281,11 +284,11 @@ class Program
         switch (response.Status)
         {
             case ResponseStatus.Success:
-                Console.WriteLine(response.Message);
+                Logger.Output(response.Message);
                 
                 if (commandType == CommandType.CheckStatus)
                 {
-                    Console.WriteLine($"Recording status: {(response.IsRecording ? "Active" : "Idle")}");
+                    Logger.Output($"Recording status: {(response.IsRecording ? "Active" : "Idle")}");
                 }
                 else if (commandType == CommandType.ListWindows)
                 {
@@ -320,19 +323,19 @@ class Program
     {
         if (!response.Data.TryGetValue("count", out var countStr) || !int.TryParse(countStr, out int count))
         {
-            Console.WriteLine("No window data available");
+            Logger.Output("No window data available");
             return;
         }
 
         if (count == 0)
         {
-            Console.WriteLine("No capturable windows found");
+            Logger.Output("No capturable windows found");
             return;
         }
 
-        Console.WriteLine();
-        Console.WriteLine("Available Windows:");
-        Console.WriteLine("==================");
+        Logger.OutputLine();
+        Logger.Output("Available Windows:");
+        Logger.Output("==================");
 
         for (int i = 0; i < count; i++)
         {
@@ -340,32 +343,32 @@ class Program
             var title = response.Data.GetValueOrDefault($"window_{i}_title", "N/A");
             var size = response.Data.GetValueOrDefault($"window_{i}_size", "N/A");
 
-            Console.WriteLine($"  {title}");
-            Console.WriteLine($"      Handle: {handle}");
-            Console.WriteLine($"      Size:   {size}");
-            Console.WriteLine();
+            Logger.Output($"  {title}");
+            Logger.Output($"      Handle: {handle}");
+            Logger.Output($"      Size:   {size}");
+            Logger.OutputLine();
         }
 
-        Console.WriteLine($"To record a specific window, use: etwsnap start --window <handle>");
+        Logger.Output($"To record a specific window, use: etwsnap start --window <handle>");
     }
 
     private static void DisplayMonitorsList(Response response)
     {
         if (!response.Data.TryGetValue("count", out var countStr) || !int.TryParse(countStr, out int count))
         {
-            Console.WriteLine("No monitor data available");
+            Logger.Output("No monitor data available");
             return;
         }
 
         if (count == 0)
         {
-            Console.WriteLine("No monitors found");
+            Logger.Output("No monitors found");
             return;
         }
 
-        Console.WriteLine();
-        Console.WriteLine("Available Monitors:");
-        Console.WriteLine("===================");
+        Logger.OutputLine();
+        Logger.Output("Available Monitors:");
+        Logger.Output("===================");
 
         for (int i = 0; i < count; i++)
         {
@@ -374,13 +377,13 @@ class Program
             var bounds = response.Data.GetValueOrDefault($"monitor_{i}_bounds", "N/A");
             var isPrimary = response.Data.GetValueOrDefault($"monitor_{i}_primary", "False") == "True";
 
-            Console.WriteLine($"  {name}{(isPrimary ? " (PRIMARY)" : "")}");
-            Console.WriteLine($"      Handle: {handle}");
-            Console.WriteLine($"      Bounds: {bounds}");
-            Console.WriteLine();
+            Logger.Output($"  {name}{(isPrimary ? " (PRIMARY)" : "")}");
+            Logger.Output($"      Handle: {handle}");
+            Logger.Output($"      Bounds: {bounds}");
+            Logger.OutputLine();
         }
 
-        Console.WriteLine($"To record a specific monitor, use: etwsnap start --monitor <handle>");
+        Logger.Output($"To record a specific monitor, use: etwsnap start --monitor <handle>");
     }
 
     private static string GetWprOutputPath(string? screenshotPath)

@@ -1,3 +1,5 @@
+using ETWSnap.Service;
+
 namespace ETWSnap.Service.Recording;
 
 /// <summary>
@@ -76,7 +78,7 @@ public class RecordingStateManager : IRecordingStateManager
             _state.StartTime = DateTime.UtcNow;
             _state.CurrentSessionId = Guid.NewGuid().ToString();
 
-            Console.WriteLine($"[StateManager] Recording started - Session ID: {_state.CurrentSessionId}");
+            Logger.Info($"[StateManager] Recording started - Session ID: {_state.CurrentSessionId}");
             
             // Create recording options with defaults if not provided
             var recordingOptions = options ?? new RecordingOptions();
@@ -96,7 +98,7 @@ public class RecordingStateManager : IRecordingStateManager
 
             if (!_screenRecorder.Start(recordingOptions))
             {
-                Console.WriteLine($"[StateManager] Failed to start screen recorder");
+                Logger.Info($"[StateManager] Failed to start screen recorder");
                 _state.StartTime = null;
                 _state.CurrentSessionId = null;
                 _state.IsUsingWpr = false;
@@ -121,16 +123,16 @@ public class RecordingStateManager : IRecordingStateManager
             var sessionId = _state.CurrentSessionId;
             var duration = DateTime.UtcNow - _state.StartTime;
 
-            Console.WriteLine($"[StateManager] Recording stopped - Session ID: {sessionId}, Duration: {duration}");
+            Logger.Info($"[StateManager] Recording stopped - Session ID: {sessionId}, Duration: {duration}");
             
             // Stop screen recording and retrieve frames
             var frames = _screenRecorder.Stop();
-            Console.WriteLine($"[StateManager] Retrieved {frames.Count} frames from recording");
+            Logger.Info($"[StateManager] Retrieved {frames.Count} frames from recording");
 
             // Save frames to disk
             if (!string.IsNullOrEmpty(filePath))
             {
-                Console.WriteLine($"[StateManager] Saving recording to: {filePath}");
+                Logger.Info($"[StateManager] Saving recording to: {filePath}");
                 
                 if (frames.Count > 0)
                 {
@@ -159,11 +161,11 @@ public class RecordingStateManager : IRecordingStateManager
                     
                     // Save frames
                     int savedCount = FrameSaver.SaveFrames(frames, saveOptions);
-                    Console.WriteLine($"[StateManager] Successfully saved {savedCount} frames to: {outputDirectory}");
+                    Logger.Info($"[StateManager] Successfully saved {savedCount} frames to: {outputDirectory}");
                 }
                 else
                 {
-                    Console.WriteLine($"[StateManager] No frames available to save");
+                    Logger.Info($"[StateManager] No frames available to save");
                 }
             }
 
@@ -189,11 +191,11 @@ public class RecordingStateManager : IRecordingStateManager
             var sessionId = _state.CurrentSessionId;
             var duration = DateTime.UtcNow - _state.StartTime;
 
-            Console.WriteLine($"[StateManager] Recording cancelled - Session ID: {sessionId}, Duration: {duration}");
+            Logger.Info($"[StateManager] Recording cancelled - Session ID: {sessionId}, Duration: {duration}");
             
             // Stop screen recording without saving (discard frames)
             var frames = _screenRecorder.Stop();
-            Console.WriteLine($"[StateManager] Discarded {frames.Count} frames");
+            Logger.Info($"[StateManager] Discarded {frames.Count} frames");
             
             // Reset state
             _state.IsRecording = false;

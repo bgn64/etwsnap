@@ -66,13 +66,13 @@ public class FrameSaver
     {
         if (frames == null || frames.Count == 0)
         {
-            Console.WriteLine("[FrameSaver] No frames to save");
+            Logger.Info("[FrameSaver] No frames to save");
             return 0;
         }
 
         if (string.IsNullOrEmpty(options.OutputDirectory))
         {
-            Console.WriteLine("[FrameSaver] Output directory not specified");
+            Logger.Info("[FrameSaver] Output directory not specified");
             return 0;
         }
 
@@ -83,7 +83,7 @@ public class FrameSaver
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[FrameSaver] Failed to create output directory: {ex.Message}");
+            Logger.Info($"[FrameSaver] Failed to create output directory: {ex.Message}");
             return 0;
         }
 
@@ -91,8 +91,8 @@ public class FrameSaver
         var imageFormat = GetImageFormat(options.Format);
         var extension = GetFileExtension(options.Format);
 
-        Console.WriteLine($"[FrameSaver] Saving {frames.Count} frames to: {options.OutputDirectory}");
-        Console.WriteLine($"[FrameSaver] Format: {options.Format}, Base filename: {options.BaseFilename}");
+        Logger.Info($"[FrameSaver] Saving {frames.Count} frames to: {options.OutputDirectory}");
+        Logger.Info($"[FrameSaver] Format: {options.Format}, Base filename: {options.BaseFilename}");
 
         int savedCount = 0;
         int totalFrames = frames.Count;
@@ -107,7 +107,7 @@ public class FrameSaver
                 // Skip frames without pixel data
                 if (frame.PixelData == null || frame.PixelData.Length == 0)
                 {
-                    Console.WriteLine($"[FrameSaver] Skipping frame {frame.FrameNumber} - no pixel data");
+                    Logger.Info($"[FrameSaver] Skipping frame {frame.FrameNumber} - no pixel data");
                     continue;
                 }
 
@@ -125,17 +125,17 @@ public class FrameSaver
                 int progressPercent = (savedCount * 100) / totalFrames;
                 if (progressPercent >= lastProgressPercent + 10)
                 {
-                    Console.WriteLine($"[FrameSaver] Progress: {progressPercent}% ({savedCount}/{totalFrames} frames)");
+                    Logger.Info($"[FrameSaver] Progress: {progressPercent}% ({savedCount}/{totalFrames} frames)");
                     lastProgressPercent = progressPercent;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[FrameSaver] Failed to save frame {frame.FrameNumber}: {ex.Message}");
+                Logger.Info($"[FrameSaver] Failed to save frame {frame.FrameNumber}: {ex.Message}");
             }
         }
 
-        Console.WriteLine($"[FrameSaver] Saved {savedCount} of {totalFrames} frames");
+        Logger.Info($"[FrameSaver] Saved {savedCount} of {totalFrames} frames");
         return savedCount;
     }
 

@@ -9,6 +9,7 @@ public interface IServiceManager
 {
     Task<bool> IsServiceRunningAsync(CancellationToken cancellationToken = default);
     Task<bool> StartServiceAsync(CancellationToken cancellationToken = default);
+    Task<bool> StartServiceAsync(bool verboseMode, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -45,7 +46,12 @@ public class ServiceManager : IServiceManager
         }
     }
 
-    public async Task<bool> StartServiceAsync(CancellationToken cancellationToken = default)
+    public Task<bool> StartServiceAsync(CancellationToken cancellationToken = default)
+    {
+        return StartServiceAsync(false, cancellationToken);
+    }
+
+    public async Task<bool> StartServiceAsync(bool verboseMode, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -71,6 +77,12 @@ public class ServiceManager : IServiceManager
                 RedirectStandardOutput = false,
                 RedirectStandardError = false
             };
+
+            // Pass verbose flag to service if enabled
+            if (verboseMode)
+            {
+                startInfo.Arguments = "--verbose";
+            }
 
             var process = Process.Start(startInfo);
             if (process == null)
