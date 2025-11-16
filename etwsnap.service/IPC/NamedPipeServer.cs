@@ -9,7 +9,7 @@ namespace ETWSnap.Service.IPC;
 /// </summary>
 public interface IPipeServer : IDisposable
 {
-    Task StartAsync(Func<Request, Task<Response>> commandHandler, CancellationToken cancellationToken = default);
+    Task StartAsync(Func<Request, Action<Response>, Task<Response>> commandHandler, CancellationToken cancellationToken = default);
     void Stop();
 }
 
@@ -23,7 +23,7 @@ public class NamedPipeServer : IPipeServer
     private bool _isRunning;
     private CancellationTokenSource? _cts;
 
-    public async Task StartAsync(Func<Request, Task<Response>> commandHandler, CancellationToken cancellationToken = default)
+    public async Task StartAsync(Func<Request, Action<Response>, Task<Response>> commandHandler, CancellationToken cancellationToken = default)
     {
         lock (_lockObj)
         {
@@ -55,7 +55,7 @@ public class NamedPipeServer : IPipeServer
         }
     }
 
-    private async Task AcceptClientAsync(Func<Request, Task<Response>> commandHandler, CancellationToken cancellationToken)
+    private async Task AcceptClientAsync(Func<Request, Action<Response>, Task<Response>> commandHandler, CancellationToken cancellationToken)
     {
         var server = new NamedPipeServerStream(
             PipeName,
@@ -94,12 +94,13 @@ public class NamedPipeServer : IPipeServer
         }
     }
 
-    private async Task HandleClientAsync(NamedPipeServerStream server, Func<Request, Task<Response>> commandHandler, CancellationToken cancellationToken)
+    private async Task HandleClientAsync(NamedPipeServerStream server, Func<Request, Action<Response>, Task<Response>> commandHandler, CancellationToken cancellationToken)
     {
         try
         {
             using var reader = new StreamReader(server, leaveOpen: true);
             using var writer = new StreamWriter(server, leaveOpen: true);
+            var writerLock = new SemaphoreSlim(1, 1);
 
             var requestJson = await reader.ReadLineAsync(cancellationToken);
             
@@ -117,15 +118,33 @@ public class NamedPipeServer : IPipeServer
                     Status = ResponseStatus.Error,
                     Message = "Invalid request format"
                 };
-                await SendResponseAsync(writer, errorResponse);
+                await SendResponseAsync(writer, errorResponse, writerLock);
                 return;
             }
 
-            // Handle command
-            var response = await commandHandler(request);
+            // Create progress callback that sends progress updates to the client
+            // Use synchronous blocking to prevent concurrent writes to the stream
+            Action<Response> progressCallback = (progressResponse) =>
+            {
+                // Block synchronously to send the progress update
+                writerLock.Wait();
+                try
+                {
+                    var responseJson = JsonSerializer.Serialize(progressResponse);
+                    writer.WriteLine(responseJson);
+                    writer.Flush();
+                }
+                finally
+                {
+                    writerLock.Release();
+                }
+            };
 
-            // Send response
-            await SendResponseAsync(writer, response);
+            // Handle command with progress callback
+            var response = await commandHandler(request, progressCallback);
+
+            // Send final response
+            await SendResponseAsync(writer, response, writerLock);
         }
         catch (Exception ex)
         {
@@ -133,11 +152,19 @@ public class NamedPipeServer : IPipeServer
         }
     }
 
-    private async Task SendResponseAsync(StreamWriter writer, Response response)
+    private async Task SendResponseAsync(StreamWriter writer, Response response, SemaphoreSlim writerLock)
     {
-        var responseJson = JsonSerializer.Serialize(response);
-        await writer.WriteLineAsync(responseJson);
-        await writer.FlushAsync();
+        await writerLock.WaitAsync();
+        try
+        {
+            var responseJson = JsonSerializer.Serialize(response);
+            await writer.WriteLineAsync(responseJson);
+            await writer.FlushAsync();
+        }
+        finally
+        {
+            writerLock.Release();
+        }
     }
 
     public void Stop()

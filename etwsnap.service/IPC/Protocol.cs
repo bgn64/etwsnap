@@ -21,7 +21,8 @@ public enum ResponseStatus
     Success,
     Error,
     AlreadyRecording,
-    NotRecording
+    NotRecording,
+    Progress  // Progress update message
 }
 
 /// <summary>
@@ -52,4 +53,5 @@ public class Response
     public bool IsRecording { get; set; }
     public Dictionary<string, string> Data { get; set; } = new();
     public bool IsUsingWpr { get; set; } = false;  // Whether WPR tracing is enabled for this session
+    public int? ProgressPercent { get; set; }  // Progress percentage (0-100) for Progress status
 }

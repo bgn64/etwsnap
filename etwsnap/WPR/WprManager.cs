@@ -99,14 +99,16 @@ public static class WprManager
 
         try
         {
+            // Don't redirect output - let wpr.exe write directly to console
+            // This allows the user to see the progress bar and status messages
             var startInfo = new ProcessStartInfo
             {
                 FileName = "wpr.exe",
                 Arguments = $"-stop \"{outputPath}\"",
                 UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
+                CreateNoWindow = false
             };
 
             using var process = Process.Start(startInfo);
@@ -118,26 +120,10 @@ public static class WprManager
 
             process.WaitForExit();
 
-            var output = process.StandardOutput.ReadToEnd();
-            var error = process.StandardError.ReadToEnd();
-
             if (process.ExitCode != 0)
             {
                 Logger.Error($"WPR: Failed to stop tracing (exit code {process.ExitCode})");
-                if (!string.IsNullOrWhiteSpace(error))
-                {
-                    Logger.Error($"WPR Error: {error}");
-                }
-                if (!string.IsNullOrWhiteSpace(output))
-                {
-                    Logger.Error($"WPR Output: {output}");
-                }
                 return false;
-            }
-
-            if (!string.IsNullOrWhiteSpace(output))
-            {
-                Logger.Info($"WPR: {output}");
             }
 
             Logger.Info($"WPR trace saved to: {outputPath}");

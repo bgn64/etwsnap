@@ -22,7 +22,7 @@ public interface IRecordingStateManager
     bool IsRecording { get; }
     RecordingState GetState();
     bool StartRecording(RecordingOptions? options = null);
-    bool StopRecording(string? filePath = null);
+    bool StopRecording(string? filePath = null, Action<int, string>? onProgress = null);
     bool CancelRecording();
 }
 
@@ -111,7 +111,7 @@ public class RecordingStateManager : IRecordingStateManager
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
-    public bool StopRecording(string? filePath = null)
+    public bool StopRecording(string? filePath = null, Action<int, string>? onProgress = null)
     {
         lock (_lockObj)
         {
@@ -159,8 +159,8 @@ public class RecordingStateManager : IRecordingStateManager
                         JpegQuality = _screenRecorder.Options.JpegQuality
                     };
                     
-                    // Save frames
-                    int savedCount = FrameSaver.SaveFrames(frames, saveOptions);
+                    // Save frames with progress callback
+                    int savedCount = FrameSaver.SaveFrames(frames, saveOptions, onProgress);
                     Logger.Info($"[StateManager] Successfully saved {savedCount} frames to: {outputDirectory}");
                 }
                 else

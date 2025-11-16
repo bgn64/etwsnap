@@ -88,4 +88,20 @@ public static class Logger
     {
         Console.WriteLine();
     }
+
+    /// <summary>
+    /// Write a progress update that overwrites the current line (always shown)
+    /// </summary>
+    public static void Progress(string message)
+    {
+        Console.Write($"\r{message}");
+    }
+
+    /// <summary>
+    /// Write a progress update with formatting that overwrites the current line (always shown)
+    /// </summary>
+    public static void Progress(string format, params object[] args)
+    {
+        Console.Write("\r" + string.Format(format, args));
+    }
 }

@@ -8,7 +8,7 @@ namespace ETWSnap.Service.Commands;
 /// </summary>
 public interface ICommandHandler
 {
-    Task<Response> HandleCommandAsync(Request request);
+    Task<Response> HandleCommandAsync(Request request, Action<Response> onProgress);
 }
 
 /// <summary>
@@ -23,14 +23,14 @@ public class CommandHandler : ICommandHandler
         _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
     }
 
-    public Task<Response> HandleCommandAsync(Request request)
+    public Task<Response> HandleCommandAsync(Request request, Action<Response> onProgress)
     {
         Logger.Info($"[CommandHandler] Received command: {request.Command}");
 
         return request.Command switch
         {
             CommandType.Start => HandleStartCommand(request),
-            CommandType.Stop => HandleStopCommand(request),
+            CommandType.Stop => HandleStopCommand(request, onProgress),
             CommandType.Cancel => HandleCancelCommand(request),
             CommandType.CheckStatus => HandleStatusCommand(request),
             CommandType.ListWindows => HandleListWindowsCommand(request),
@@ -109,7 +109,8 @@ public class CommandHandler : ICommandHandler
         }
     }
 
-    private Task<Response> HandleStopCommand(Request request)
+    [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
+    private Task<Response> HandleStopCommand(Request request, Action<Response> onProgress)
     {
         if (!_stateManager.IsRecording)
         {
@@ -134,7 +135,18 @@ public class CommandHandler : ICommandHandler
         // Get IsUsingWpr flag before stopping
         var isUsingWpr = _stateManager.GetState().IsUsingWpr;
         
-        var success = _stateManager.StopRecording(request.FilePath);
+        // Create progress callback that converts to Response objects
+        Action<int, string> progressCallback = (percent, message) =>
+        {
+            onProgress(new Response
+            {
+                Status = ResponseStatus.Progress,
+                Message = message,
+                ProgressPercent = percent
+            });
+        };
+        
+        var success = _stateManager.StopRecording(request.FilePath, progressCallback);
         
         if (success)
         {

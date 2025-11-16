@@ -158,7 +158,7 @@ class Program
 
     private static async Task<int> HandleStopCommand(IPipeClient pipeClient, ParsedCommand parsedCommand)
     {
-        // Send stop command to service
+        // Send stop command to service with progress callback
         var request = new Request
         {
             Command = parsedCommand.Type,
@@ -168,7 +168,25 @@ class Program
             IsUsingWpr = false  // Not used for stop command
         };
 
-        var response = await pipeClient.SendCommandAsync(request);
+        // Use the progress-aware method to receive updates
+        var response = await pipeClient.SendCommandWithProgressAsync(request, (progressResponse) =>
+        {
+            // Display progress updates to the user
+            if (progressResponse.ProgressPercent.HasValue)
+            {
+                Logger.Progress($"{progressResponse.Message} ({progressResponse.ProgressPercent}%)");
+            }
+            else
+            {
+                Logger.Output(progressResponse.Message);
+            }
+        });
+
+        // Clear the progress line
+        if (response.Status == ResponseStatus.Success)
+        {
+            Logger.OutputLine(); // Move to next line after progress
+        }
 
         // Handle response and stop WPR if needed
         int result = HandleResponse(response, parsedCommand.Type);

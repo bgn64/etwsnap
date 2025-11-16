@@ -60,9 +60,10 @@ public class FrameSaver
     /// </summary>
     /// <param name="frames">The frames to save</param>
     /// <param name="options">Options controlling how frames are saved</param>
+    /// <param name="onProgress">Optional callback for progress updates (percent, message)</param>
     /// <returns>Number of frames successfully saved</returns>
     [System.Runtime.Versioning.SupportedOSPlatform("windows6.1")]
-    public static int SaveFrames(List<FrameData> frames, FrameSaveOptions options)
+    public static int SaveFrames(List<FrameData> frames, FrameSaveOptions options, Action<int, string>? onProgress = null)
     {
         if (frames == null || frames.Count == 0)
         {
@@ -121,9 +122,17 @@ public class FrameSaver
                 SaveFrame(frame, filename, imageFormat, options);
                 savedCount++;
 
-                // Show progress every 10%
+                // Calculate progress percentage
                 int progressPercent = (savedCount * 100) / totalFrames;
-                if (progressPercent >= lastProgressPercent + 10)
+                
+                // Report progress via callback if provided
+                if (onProgress != null && progressPercent > lastProgressPercent)
+                {
+                    onProgress(progressPercent, $"Saving screenshots: {savedCount}/{totalFrames} frames");
+                    lastProgressPercent = progressPercent;
+                }
+                // Otherwise show progress every 10%
+                else if (onProgress == null && progressPercent >= lastProgressPercent + 10)
                 {
                     Logger.Info($"[FrameSaver] Progress: {progressPercent}% ({savedCount}/{totalFrames} frames)");
                     lastProgressPercent = progressPercent;

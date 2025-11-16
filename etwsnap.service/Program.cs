@@ -36,7 +36,7 @@ class Program
 
             // Start listening for commands
             await pipeServer.StartAsync(
-                async (request) => await commandHandler.HandleCommandAsync(request),
+                async (request, onProgress) => await commandHandler.HandleCommandAsync(request, onProgress),
                 cts.Token);
         }
         catch (OperationCanceledException)
