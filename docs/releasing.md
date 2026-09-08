@@ -6,8 +6,8 @@ Release automation runs entirely in GitHub Actions and does not require signing 
 
 1. Make the repository public before distributing through Scoop. Private GitHub release assets require authentication and cannot serve as a public Scoop source.
 2. Merge the release workflows into the default branch.
-3. In **Settings > Actions > General > Workflow permissions**, allow read and write access for `GITHUB_TOKEN`.
-4. Ensure branch protection permits `github-actions[bot]` to update `bucket/etwsnap.json`, or be prepared to apply that generated manifest manually after each stable release.
+3. In **Settings > Actions > General > Workflow permissions**, select **Read and write permissions**.
+4. Enable **Allow GitHub Actions to create and approve pull requests**. The workflow creates a Scoop-update PR but does not approve or merge it.
 
 GitHub provenance attestations are generated only when the repository is public. No signing account, certificate, or repository secret is required.
 
@@ -40,7 +40,7 @@ The release workflow:
 3. Smoke-tests the extracted package.
 4. Generates a GitHub provenance attestation for public repositories.
 5. Publishes the GitHub Release.
-6. Updates `bucket/etwsnap.json` on the default branch for stable versions.
+6. Opens or updates a pull request containing `bucket/etwsnap.json` for stable versions.
 
 Prerelease tags such as `v0.2.0-preview.1` create prerelease assets but do not update Scoop.
 
