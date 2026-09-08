@@ -2,9 +2,15 @@
   <Configurations>
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
-    <Platform Name="x86" />
   </Configurations>
-  <Project Path="etwsnap.service/etwsnap.service.csproj" Id="77d48fbb-ee88-447b-ba76-b083754de888" />
-  <Project Path="etwsnap/etwsnap.csproj" />
-  <Project Path="etwsnap.service.native/etwsnap.service.native.vcxproj" Id="b6f267a7-4439-4a7c-aa80-ce80ef8dbc2a" />
+  <Folder Name="/src/">
+    <Project Path="src/EtwSnap.Contracts/EtwSnap.Contracts.csproj" />
+    <Project Path="src/EtwSnap.Cli/EtwSnap.Cli.csproj" />
+    <Project Path="src/EtwSnap.Host/EtwSnap.Host.csproj" />
+    <Project Path="src/EtwSnap.Native/EtwSnap.Native.vcxproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EtwSnap.UnitTests/EtwSnap.UnitTests.csproj" />
+    <Project Path="tests/EtwSnap.IntegrationTests/EtwSnap.IntegrationTests.csproj" />
+  </Folder>
 </Solution>
