@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-package:
+    runs-on: windows-2025
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Build and test
+        shell: pwsh
+        run: ./eng/Build.ps1 -Version "0.1.0-ci.${{ github.run_number }}"
+
+      - name: Package and smoke test
+        shell: pwsh
+        run: ./eng/Package.ps1 -Version "0.1.0-ci.${{ github.run_number }}" -SkipBuild
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: etwsnap-win-x64
+          if-no-files-found: error
+          path: |
+            artifacts/etwsnap-*-win-x64.zip
+            artifacts/etwsnap-*-win-x64.zip.sha256
+            artifacts/etwsnap-*-win-x64-symbols.zip

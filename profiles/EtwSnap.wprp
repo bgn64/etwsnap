@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<WindowsPerformanceRecorder Author="ETWSnap" Version="1.0">
+  <Profiles>
+    <EventCollector Id="EventCollector_ETWSnap" Name="ETWSnap_EventCollector">
+      <BufferSize Value="64" />
+      <Buffers Value="32" />
+    </EventCollector>
+    <EventProvider Id="EventProvider_ETWSnap" Name="524507bc-3009-5e8d-c071-00a1c641849f" Level="5" NonPagedMemory="true" />
+    <Profile Id="EtwSnap.Verbose.Memory" Name="EtwSnap" Description="ETWSnap frame correlation events" LoggingMode="Memory" DetailLevel="Verbose" Default="true">
+      <Collectors>
+        <EventCollectorId Value="EventCollector_ETWSnap">
+          <EventProviders>
+            <EventProviderId Value="EventProvider_ETWSnap" />
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+  </Profiles>
+</WindowsPerformanceRecorder>

@@ -72,7 +72,7 @@ BenchmarkDotNet.Artifacts/
 # .NET Core
 project.lock.json
 project.fragment.lock.json
-artifacts/
+/artifacts/
 
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
@@ -216,6 +216,11 @@ PublishScripts/
 **/[Pp]ackages/*
 # except build/, which is used as an MSBuild target.
 !**/[Pp]ackages/build/
+!packages/robmikh.common.0.0.23-beta/
+!packages/robmikh.common.0.0.23-beta/**
+packages/robmikh.common.0.0.23-beta/.signature.p7s
+packages/robmikh.common.0.0.23-beta/*.nupkg
+packages/robmikh.common.0.0.23-beta/docs/
 # Uncomment if necessary however generally it will be regenerated when needed
 #!**/[Pp]ackages/repositories.config
 # NuGet v3's project.json files produces more ignorable files
