@@ -2,6 +2,36 @@
 
 ETWSnap keeps a rolling, memory-bounded buffer of Windows Graphics Capture frames and emits an ETW event from the native frame callback for every accepted frame. When recording stops, retained frames are written as PNG files and can be correlated exactly with ETW events.
 
+## Install
+
+ETWSnap is distributed as an unsigned, framework-dependent x64 Windows package. Install the .NET 10 Runtime first if `dotnet --list-runtimes` does not show `Microsoft.NETCore.App 10.x`:
+
+```powershell
+winget install Microsoft.DotNet.Runtime.10
+```
+
+Scoop is the recommended installation method:
+
+```powershell
+scoop bucket add etwsnap https://github.com/bgn64/etwsnap
+scoop install etwsnap
+```
+
+Update later with:
+
+```powershell
+scoop update
+scoop update etwsnap
+```
+
+Alternatively, download `etwsnap-vX.Y.Z-win-x64.zip` from the GitHub Release, verify its adjacent SHA-256 file, extract the complete archive, and add that directory to `PATH`. Do not copy only `etwsnap.exe`; the host, native DLL, profiles, and managed dependencies are also required.
+
+Release ZIPs are currently not Authenticode-signed. GitHub build provenance can be verified with:
+
+```powershell
+gh attestation verify .\etwsnap-vX.Y.Z-win-x64.zip --repo bgn64/etwsnap
+```
+
 ## Usage
 
 Start a screenshot-only session on the primary monitor:
@@ -110,7 +140,8 @@ Frames remain in GPU memory during capture. The ring evicts oldest textures acco
 ## Requirements
 
 - x64 Windows 10 or later with Windows Graphics Capture support
-- .NET 10 SDK/runtime
+- .NET 10 Runtime for using ETWSnap
+- .NET 10 SDK for building ETWSnap
 - Visual Studio C++ build tools with C++20 and a Windows SDK
 - Windows Performance Recorder for `--trace`
 - An elevated terminal when WPR requires administrator access
@@ -120,9 +151,8 @@ Frames remain in GPU memory during capture. The ring evicts oldest textures acco
 From a Visual Studio Developer PowerShell with the C++ workload installed:
 
 ```powershell
-msbuild .\src\EtwSnap.Cli\EtwSnap.Cli.csproj `
-	/restore /t:Rebuild `
-	/p:Configuration=Release /p:Platform=x64
+.\eng\Build.ps1 -Version 0.1.0 -IncludeInteractiveTests
+.\eng\Package.ps1 -Version 0.1.0 -SkipBuild
 ```
 
 The packaged executable is written under `src\EtwSnap.Cli\bin\x64\Release\net10.0-windows`.
@@ -152,3 +182,5 @@ dotnet test .\tests\EtwSnap.IntegrationTests\EtwSnap.IntegrationTests.csproj -p:
 ```
 
 Managed-only builds cannot run `start`; the host reports a clear capture error until `EtwSnap.Native.dll` is built and deployed.
+
+Release maintainer instructions are in [docs/releasing.md](docs/releasing.md).

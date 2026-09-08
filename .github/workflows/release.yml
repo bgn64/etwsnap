@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2025
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}' -replace '^v', ''
+          . ./eng/Common.ps1
+          $null = Get-VersionParts -Version $version
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$($version.Contains('-').ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+      - name: Build and test
+        shell: pwsh
+        run: ./eng/Build.ps1 -Version '${{ steps.version.outputs.version }}'
+
+      - name: Package and smoke test
+        shell: pwsh
+        run: ./eng/Package.ps1 -Version '${{ steps.version.outputs.version }}' -SkipBuild
+
+      - name: Attest release package
+        if: github.event.repository.visibility == 'public'
+        uses: actions/attest@v4
+        with:
+          subject-path: artifacts/etwsnap-v${{ steps.version.outputs.version }}-win-x64.zip
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          $asset = "artifacts/etwsnap-v$env:VERSION-win-x64.zip"
+          $checksum = "$asset.sha256"
+          $symbols = "artifacts/etwsnap-v$env:VERSION-win-x64-symbols.zip"
+          $tag = '${{ github.ref_name }}'
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag $asset $checksum $symbols --clobber
+          }
+          else {
+            $arguments = @(
+              'release', 'create', $tag,
+              '--verify-tag',
+              '--title', "ETWSnap v$env:VERSION",
+              '--generate-notes',
+              '--notes', 'These Windows binaries are currently unsigned. Verify the SHA-256 checksum or GitHub artifact attestation before use.',
+              $asset, $checksum, $symbols
+            )
+            if ($env:PRERELEASE -eq 'true') {
+              $arguments += '--prerelease'
+            }
+            gh @arguments
+          }
+
+      - name: Generate stable Scoop manifest
+        if: steps.version.outputs.prerelease == 'false'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $checksumPath = "artifacts/etwsnap-v$env:VERSION-win-x64.zip.sha256"
+          $hash = (Get-Content $checksumPath -Raw).Split(' ', [StringSplitOptions]::RemoveEmptyEntries)[0]
+          ./eng/Update-ScoopManifest.ps1 -Version $env:VERSION -Hash $hash
+          Copy-Item ./bucket/etwsnap.json (Join-Path $env:RUNNER_TEMP 'etwsnap.json')
+
+      - name: Update stable Scoop manifest
+        if: steps.version.outputs.prerelease == 'false'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $defaultBranch = gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'
+          git fetch origin $defaultBranch
+          git switch $defaultBranch
+          git pull --ff-only origin $defaultBranch
+          New-Item ./bucket -ItemType Directory -Force | Out-Null
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'etwsnap.json') ./bucket/etwsnap.json -Force
+          git add bucket/etwsnap.json
+          if (git diff --cached --quiet) {
+            Write-Host 'Scoop manifest is already current.'
+            exit 0
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "Update Scoop manifest for v$env:VERSION"
+          git push origin "HEAD:$defaultBranch"

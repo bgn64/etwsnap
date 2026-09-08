@@ -1,0 +1,28 @@
+{
+  "version": "0.1.0",
+  "description": "Rolling screenshot capture correlated with ETW events.",
+  "homepage": "https://github.com/bgn64/etwsnap",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/bgn64/etwsnap/releases/download/v0.1.0/etwsnap-v0.1.0-win-x64.zip",
+      "hash": "377d3532f0c6b7d809c556cdee3d4d3532cc1edd2fa83c99a8a7007debca44a8"
+    }
+  },
+  "bin": "etwsnap.exe",
+  "checkver": "github",
+  "pre_install": [
+    "if (-not (Get-Command dotnet -ErrorAction SilentlyContinue) -or -not ((dotnet --list-runtimes 2>$null) -match '^Microsoft\\.NETCore\\.App 10\\.')) { error 'ETWSnap requires the .NET 10 Runtime. Install it with: winget install Microsoft.DotNet.Runtime.10'; break }"
+  ],
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/bgn64/etwsnap/releases/download/v$version/etwsnap-v$version-win-x64.zip"
+      }
+    }
+  },
+  "notes": [
+    "ETWSnap requires the .NET 10 Runtime (Microsoft.NETCore.App).",
+    "Install it with: winget install Microsoft.DotNet.Runtime.10"
+  ]
+}

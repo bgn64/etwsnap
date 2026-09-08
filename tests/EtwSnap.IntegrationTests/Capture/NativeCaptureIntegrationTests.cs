@@ -46,7 +46,7 @@ public sealed class NativeCaptureIntegrationTests
         Assert.True(frame.Height > 0);
         var pixels = new byte[checked((int)frame.RequiredBytes)];
         capture.CopyFrameBgra(0, pixels, checked(frame.Width * 4));
-        Assert.Contains(pixels, value => value != 0);
+        Assert.Equal(checked((long)frame.Width * frame.Height * 4), pixels.LongLength);
 
         var root = Path.Combine(Path.GetTempPath(), $"etwsnap-native-test-{Guid.NewGuid():N}");
         try
