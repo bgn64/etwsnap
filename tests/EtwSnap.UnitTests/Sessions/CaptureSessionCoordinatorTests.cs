@@ -202,7 +202,7 @@ public sealed class CaptureSessionCoordinatorTests
     private sealed class FakeWprController : IWprController
     {
         public Task<WprSession> StartAsync(Guid sessionId, string? userProfileSelector, CancellationToken cancellationToken) =>
-            Task.FromResult(new WprSession("test", "EtwSnap.wprp", "hash", null, null, null));
+            Task.FromResult(new WprSession("test", [], "hash", null, null, null, "staging"));
 
         public Task StopAsync(WprSession session, string outputPath, CancellationToken cancellationToken) => Task.CompletedTask;
 

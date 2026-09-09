@@ -2,6 +2,7 @@ using System.Text.Json;
 using EtwSnap.Contracts.Models;
 using EtwSnap.Host.Artifacts;
 using EtwSnap.Host.Capture;
+using EtwSnap.Host.Tracing;
 
 namespace EtwSnap.UnitTests.Artifacts;
 
@@ -47,6 +48,48 @@ public sealed class SessionArtifactWriterTests
             Assert.Equal(42UL, frame.GetProperty("frameNumber").GetUInt64());
             Assert.Equal(1234, frame.GetProperty("presentationTime100ns").GetInt64());
             Assert.Equal(5678, frame.GetProperty("callbackQpc").GetInt64());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WritesExactSupplementalProfileContents()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"etwsnap-profile-artifact-{Guid.NewGuid():N}");
+        var profileContents = "<WindowsPerformanceRecorder Version=\"staged\" />"u8.ToArray();
+        try
+        {
+            var writer = new SessionArtifactWriter();
+            var sessionId = Guid.NewGuid();
+            var startedAt = DateTimeOffset.UtcNow;
+            var request = new StartCaptureRequest(
+                true,
+                null,
+                new CaptureTarget(CaptureTargetKind.PrimaryMonitor),
+                30,
+                8,
+                true);
+            var reservation = writer.Reserve(root, sessionId, startedAt);
+            var wpr = new WprSession("test", profileContents, "hash", null, null, null, "staging");
+            using var capture = new SingleFrameCapture();
+
+            var result = await writer.WriteAsync(
+                reservation,
+                new SessionMetadata(sessionId, startedAt, request, wpr),
+                capture,
+                capture.GetStats(),
+                "trace.etl",
+                [],
+                default,
+                (_, _) => ValueTask.CompletedTask);
+
+            Assert.Equal(profileContents, await File.ReadAllBytesAsync(Path.Combine(result.OutputDirectory, "EtwSnap.wprp")));
         }
         finally
         {

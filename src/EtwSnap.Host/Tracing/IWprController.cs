@@ -10,10 +10,11 @@ internal interface IWprController
 
 internal sealed record WprSession(
     string InstanceName,
-    string SupplementalProfilePath,
+    byte[] StagedSupplementalProfileBytes,
     string SupplementalProfileHash,
     string? UserProfilePath,
     string? UserProfileSelector,
-    string? UserProfileHash);
+    string? UserProfileHash,
+    string StagingDirectory);
 
 internal sealed class WprException(string message) : Exception(message);

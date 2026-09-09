@@ -162,7 +162,10 @@ internal sealed class SessionArtifactWriter : IArtifactWriter
         {
             try
             {
-                File.Copy(session.Wpr.SupplementalProfilePath, Path.Combine(reservation.DirectoryPath, "EtwSnap.wprp"), overwrite: true);
+                await File.WriteAllBytesAsync(
+                    Path.Combine(reservation.DirectoryPath, "EtwSnap.wprp"),
+                    session.Wpr.StagedSupplementalProfileBytes,
+                    cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
