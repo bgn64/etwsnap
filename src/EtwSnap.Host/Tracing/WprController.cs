@@ -10,52 +10,108 @@ internal sealed class WprController : IWprController
     private static readonly TimeSpan StopTimeout = TimeSpan.FromMinutes(10);
     private readonly string _wprPath;
     private readonly string _supplementalProfilePath;
+    private readonly string _stagingRoot;
 
-    public WprController(string supplementalProfilePath)
+    public WprController(string supplementalProfilePath, string? stagingRoot = null)
     {
         _wprPath = Path.Combine(Environment.SystemDirectory, "wpr.exe");
         _supplementalProfilePath = Path.GetFullPath(supplementalProfilePath);
+        _stagingRoot = Path.GetFullPath(stagingRoot ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "EtwSnap",
+            "Wpr"));
     }
 
     public async Task<WprSession> StartAsync(Guid sessionId, string? userProfileSelector, CancellationToken cancellationToken)
     {
         EnsurePrerequisites();
-        var supplementalHash = await HashFileAsync(_supplementalProfilePath, cancellationToken).ConfigureAwait(false);
+        var instanceName = $"EtwSnap_{sessionId:N}";
+        var stagingDirectory = GetStagingDirectory(sessionId);
+        Directory.CreateDirectory(stagingDirectory);
+
+        var stagedSupplementalPath = Path.Combine(stagingDirectory, "EtwSnap.wprp");
         string? userPath = null;
         string? normalizedUserSelector = null;
         string? userHash = null;
 
-        if (userProfileSelector is not null)
+        try
         {
-            (userPath, normalizedUserSelector) = ParseProfileSelector(userProfileSelector);
-            await RunCheckedAsync(["-profiles", userPath], StartTimeout, cancellationToken).ConfigureAwait(false);
-            userHash = await HashFileAsync(userPath, cancellationToken).ConfigureAwait(false);
+            var supplementalHash = await StageProfileAsync(
+                _supplementalProfilePath,
+                stagedSupplementalPath,
+                cancellationToken).ConfigureAwait(false);
+            string? stagedUserSelector = null;
+
+            if (userProfileSelector is not null)
+            {
+                (userPath, normalizedUserSelector) = ParseProfileSelector(userProfileSelector);
+                var selectorSuffix = normalizedUserSelector[(normalizedUserSelector.LastIndexOf('!') + 1)..];
+                var stagedUserPath = Path.Combine(stagingDirectory, "User.wprp");
+                userHash = await StageProfileAsync(userPath, stagedUserPath, cancellationToken).ConfigureAwait(false);
+                ValidateProfileSelection(stagedUserPath, selectorSuffix);
+                await RunCheckedAsync(["-profiles", stagedUserPath], StartTimeout, cancellationToken).ConfigureAwait(false);
+                stagedUserSelector = $"{stagedUserPath}!{selectorSuffix}";
+            }
+
+            var arguments = CreateStartArguments(instanceName, stagedSupplementalPath, stagedUserSelector);
+            await RunCheckedAsync(arguments, StartTimeout, cancellationToken).ConfigureAwait(false);
+            return new WprSession(
+                instanceName,
+                await File.ReadAllBytesAsync(stagedSupplementalPath, cancellationToken).ConfigureAwait(false),
+                supplementalHash,
+                userPath,
+                normalizedUserSelector,
+                userHash,
+                stagingDirectory);
         }
-
-        var instanceName = $"EtwSnap_{sessionId:N}";
-        var arguments = CreateStartArguments(instanceName, _supplementalProfilePath, normalizedUserSelector);
-
-        await RunCheckedAsync(arguments, StartTimeout, cancellationToken).ConfigureAwait(false);
-        return new WprSession(
-            instanceName,
-            _supplementalProfilePath,
-            supplementalHash,
-            userPath,
-            normalizedUserSelector,
-            userHash);
+        catch
+        {
+            DeleteStagingDirectory(stagingDirectory);
+            throw;
+        }
     }
 
-    public Task StopAsync(WprSession session, string outputPath, CancellationToken cancellationToken) =>
-        RunCheckedAsync(
-            ["-stop", Path.GetFullPath(outputPath), "-skipPdbGen", "-instancename", session.InstanceName],
-            StopTimeout,
-            cancellationToken);
+    public async Task StopAsync(WprSession session, string outputPath, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RunCheckedAsync(
+                ["-stop", Path.GetFullPath(outputPath), "-skipPdbGen", "-instancename", session.InstanceName],
+                StopTimeout,
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            DeleteStagingDirectory(session.StagingDirectory);
+        }
+    }
 
-    public Task CancelAsync(WprSession session, CancellationToken cancellationToken) =>
-        CancelInstanceAsync(session.InstanceName, cancellationToken);
+    public async Task CancelAsync(WprSession session, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RunCheckedAsync(["-cancel", "-instancename", session.InstanceName], StartTimeout, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            DeleteStagingDirectory(session.StagingDirectory);
+        }
+    }
 
-    public Task CancelInstanceAsync(string instanceName, CancellationToken cancellationToken) =>
-        RunCheckedAsync(["-cancel", "-instancename", instanceName], StartTimeout, cancellationToken);
+    public async Task CancelInstanceAsync(string instanceName, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RunCheckedAsync(["-cancel", "-instancename", instanceName], StartTimeout, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (TryGetSessionId(instanceName, out var sessionId))
+            {
+                DeleteStagingDirectory(GetStagingDirectory(sessionId));
+            }
+        }
+    }
 
     private void EnsurePrerequisites()
     {
@@ -83,6 +139,48 @@ internal sealed class WprController : IWprController
         arguments.Add("-instancename");
         arguments.Add(instanceName);
         return arguments;
+    }
+
+    internal static async Task<string> StageProfileAsync(
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)
+            ?? throw new InvalidOperationException("The staged profile path has no parent directory."));
+
+        var temporaryPath = destinationPath + ".tmp";
+        try
+        {
+            await using (var source = new FileStream(
+                sourcePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                64 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            await using (var destination = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                64 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+                await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            File.Move(temporaryPath, destinationPath);
+            return await HashFileAsync(destinationPath, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
     }
 
     private async Task RunCheckedAsync(IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken cancellationToken)
@@ -198,5 +296,29 @@ internal sealed class WprController : IWprController
         await using var stream = File.OpenRead(path);
         var hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
         return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private string GetStagingDirectory(Guid sessionId) => Path.Combine(_stagingRoot, sessionId.ToString("N"));
+
+    private static bool TryGetSessionId(string instanceName, out Guid sessionId)
+    {
+        const string prefix = "EtwSnap_";
+        sessionId = default;
+        return instanceName.StartsWith(prefix, StringComparison.Ordinal) &&
+            Guid.TryParseExact(instanceName[prefix.Length..], "N", out sessionId);
+    }
+
+    private static void DeleteStagingDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch
+        {
+        }
     }
 }

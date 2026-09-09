@@ -56,6 +56,8 @@ etwsnap start --trace --profile ".\performance.wprp!Performance.Verbose"
 
 The user profile is validated and passed to WPR unchanged. `--profile` requires `--trace`; ETWSnap never edits WPRP files.
 
+Before WPR starts, ETWSnap stages byte-for-byte profile copies under `%LOCALAPPDATA%\EtwSnap\Wpr` so package-manager junctions and symbolic links are never passed to WPR. Staged files are removed after stop, cancel, failure, or recovery.
+
 Stop and choose the output root:
 
 ```powershell
