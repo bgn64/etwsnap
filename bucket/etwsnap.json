@@ -6,7 +6,7 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/bgn64/etwsnap/releases/download/v0.1.0/etwsnap-v0.1.0-win-x64.zip",
-      "hash": "377d3532f0c6b7d809c556cdee3d4d3532cc1edd2fa83c99a8a7007debca44a8"
+      "hash": "d9b1c8dcc725b755ea7ce45adac3ddec6213362c7bfcbad9173591d50f089570"
     }
   },
   "bin": "etwsnap.exe",
