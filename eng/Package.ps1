@@ -44,6 +44,8 @@ Copy-Item (Join-Path $root 'README.md') (Join-Path $stage 'README.md')
 Copy-Item (Join-Path $root 'THIRD-PARTY-NOTICES.txt') (Join-Path $stage 'THIRD-PARTY-NOTICES.txt')
 New-Item (Join-Path $stage 'docs') -ItemType Directory -Force | Out-Null
 Copy-Item (Join-Path $root 'docs\releasing.md') (Join-Path $stage 'docs\releasing.md')
+Copy-Item (Join-Path $root 'docs\etw-schema.md') (Join-Path $stage 'docs\etw-schema.md')
+Copy-Item (Join-Path $root 'docs\wpa-plugin.md') (Join-Path $stage 'docs\wpa-plugin.md')
 New-Item (Join-Path $stage 'licenses') -ItemType Directory -Force | Out-Null
 Copy-Item (Join-Path $root 'packages\robmikh.common.0.0.23-beta\LICENSE') `
     (Join-Path $stage 'licenses\robmikh.common.txt')

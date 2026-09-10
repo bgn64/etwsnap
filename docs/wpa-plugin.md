@@ -1,0 +1,83 @@
+# ETWSnap WPA Plugin
+
+`EtwSnap.WpaPlugin` is an independent Microsoft Performance Toolkit SDK `ProcessingSource`. It uses only public SDK and TraceEvent APIs and can coexist with XPerf while parsing the same ETL independently.
+
+## Tables
+
+`ETWSnap Screenshots` exposes every `FrameCaptured` event with ETW event-header time assigned to the WPA `StartTime` role. Duration extends to the next frame in the same session, or to `RecordingStopped` for the final frame.
+
+Configurations:
+
+- `Saved Screenshots` filters to manifest-backed PNGs that currently exist.
+- `All Frames` includes saved, missing, evicted/not-persisted, and unresolved frames.
+
+`All Frames` is the default so traces without accessible artifacts still show every ETW frame.
+
+`ETWSnap Sessions` exposes lifecycle settings, frame statistics, artifact resolution state, manifest path, and integrity diagnostics. Both tables assign public `StartTime` and `Duration` column roles so they can share selection and zoom with other tables in the same WPA Analysis tab.
+
+The first plugin version is table-only. It does not provide thumbnails, image preview, custom docking, or a preset WPA layout.
+
+## Artifact discovery
+
+For each full session ID, the plugin checks only these exact candidates:
+
+1. The original artifact directory recorded by `ArtifactReference` or `ArtifactCommitted`.
+2. `manifest.json` beside the ETL for an ordinary ETWSnap session directory.
+3. `sessions/<full-session-id>/manifest.json` beside the ETL for a portable multi-session bundle.
+
+The plugin never recursively scans directories or guesses from frame filenames. Multiple non-identical valid candidates are reported as ambiguous.
+
+A manifest must have a supported schema, matching full session ID and provider GUID, unique frame numbers, contained relative image paths, matching ETW frame metadata, and a matching committed SHA-256 when available. Artifact failures do not hide ETW rows.
+
+Portable single-session layout:
+
+```text
+session/
+  trace.etl
+  manifest.json
+  frames/
+```
+
+Portable multi-session layout:
+
+```text
+bundle/
+  trace.etl
+  sessions/
+    <full-session-id>/
+      manifest.json
+      frames/
+```
+
+## Build and compatibility
+
+The project currently targets `net8.0-windows`, Microsoft.Performance.SDK `1.2.2-preview`, and TraceEvent `3.1.21`. SDK `1.2.*-preview` supports WPA `11.7.240.51934` and later. Manual UI validation passed on WPA `11.9.89.56208` with hosted SDK `1.4.9-preview2`.
+
+```powershell
+dotnet build .\src\EtwSnap.WpaPlugin\EtwSnap.WpaPlugin.csproj -c Release
+dotnet test .\tests\EtwSnap.WpaPlugin.Tests\EtwSnap.WpaPlugin.Tests.csproj -c Release
+```
+
+Launch the loose development plugin without installing or packaging it:
+
+```powershell
+.\eng\Launch-WpaPlugin.ps1 -TracePath .\etwsnap-20260910T162304Z-5d65bd20\trace.etl
+```
+
+The launcher deliberately keeps WPA's default processing sources enabled so ETWSnap and XPerf tables are available together. Use `-NoDefault` only when isolating plugin-load failures.
+
+The launcher prefers `wpa.exe` from `PATH` and falls back to the standard ADK location. On the validation machine, `C:\xperf\wpa.exe` loaded the plugin while the older ADK copy could not enumerate loose managed plugins because its host dependency manifest was missing. Pass `-WpaPath` to select a specific installation.
+
+For the checked local sample, validate:
+
+1. `Help > About Windows Performance Analyzer` includes an ETWSnap processing-source tab.
+2. Graph Explorer contains `ETWSnap Screenshots` and `ETWSnap Sessions`.
+3. Sessions shows ID `5d65bd20-5bdc-4ffc-9853-562989078d96`, 101 accepted, 35 retained, 66 evicted, 0 dropped/errors, and 35 exported.
+4. Screenshots shows 101 rows in `All Frames` and 35 rows in `Saved Screenshots`; saved paths open under the sibling `frames` directory.
+5. An ETWSnap graph and an XPerf graph in the same Analysis tab follow the same zoom and highlighted time range.
+
+If the plugin does not appear, open `Window > Diagnostic Console` and capture the complete load error, then retry with `-NoDefault` to distinguish plugin loading from interaction with default processing sources.
+
+`eng\Package-WpaPlugin.ps1` installs the published `Microsoft.Performance.Toolkit.Plugins.Cli` tool at pinned version `0.1.77-preview` into the ignored short path `artifacts\.pt`, validates the generated package metadata, and produces the `.ptix`, SHA-256, and symbols archive. The temporary tool directory is removed afterward. WPA does not install `plugintool`; it is build-time packaging infrastructure. Use `-PluginToolNuGetSource` only when the configured NuGet source needs to be overridden.
+
+The output includes the plugin's third-party TraceEvent dependencies but deliberately excludes `Microsoft.Performance.SDK.dll`; WPA supplies that shared runtime and rejects packaged plugins that carry their own copy.

@@ -64,7 +64,7 @@ public sealed class CaptureSessionCoordinatorTests
     public async Task SuccessfulStopPersistsAndReturnsToIdle()
     {
         var fixture = new CoordinatorFixture();
-        var started = await fixture.Coordinator.StartAsync(CreateRequest(), default);
+        var started = await fixture.Coordinator.StartAsync(CreateRequest() with { Trace = true }, default);
         var request = WireMessage.CreateRequest(CommandKind.Stop, new StopCaptureRequest(@"D:\Captures"));
 
         var result = await fixture.Coordinator.StopAsync(
@@ -78,6 +78,28 @@ public sealed class CaptureSessionCoordinatorTests
         Assert.Equal(1, fixture.Capture.StopCalls);
         Assert.True(fixture.Capture.Disposed);
         Assert.Equal(CaptureSessionState.Idle, fixture.Coordinator.GetStatus().State);
+        Assert.Equal(["Reserve", "ArtifactReference", "CaptureStop", "WprStop", "Write", "ArtifactCommitted"], fixture.StopOperations);
+        Assert.Equal(started.SessionId, fixture.ArtifactEvents.Reference?.SessionId);
+        Assert.Equal("sessions/" + started.SessionId.ToString("N") + "/manifest.json", fixture.ArtifactEvents.Reference?.PortableManifestRelativePath);
+        Assert.Equal("hash", fixture.ArtifactEvents.Committed?.ManifestSha256);
+    }
+
+    [Fact]
+    public async Task ArtifactEventFailureDoesNotFailStop()
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.ArtifactEvents.Error = new InvalidOperationException("provider unavailable");
+        await fixture.Coordinator.StartAsync(CreateRequest(), default);
+        var request = WireMessage.CreateRequest(CommandKind.Stop, new StopCaptureRequest(@"D:\Captures"));
+
+        var result = await fixture.Coordinator.StopAsync(
+            request.ReadPayload<StopCaptureRequest>(),
+            _ => ValueTask.CompletedTask,
+            request,
+            default);
+
+        Assert.Equal(3, result.ExportedFrames);
+        Assert.Equal(CaptureSessionState.Idle, fixture.Coordinator.GetStatus().State);
     }
 
     private static StartCaptureRequest CreateRequest() => new(
@@ -90,18 +112,23 @@ public sealed class CaptureSessionCoordinatorTests
 
     private sealed class CoordinatorFixture
     {
-        public FakeCaptureSession Capture { get; } = new();
+        public List<string> StopOperations { get; } = [];
+        public FakeCaptureSession Capture { get; }
         public FakeCaptureFactory Factory { get; }
+        public FakeArtifactEventEmitter ArtifactEvents { get; }
         public FakeRecoveryStore Recovery { get; } = new();
         public Exception? ReservationError { get; set; }
 
         public CoordinatorFixture()
         {
+            Capture = new FakeCaptureSession(StopOperations);
             Factory = new FakeCaptureFactory(Capture);
+            ArtifactEvents = new FakeArtifactEventEmitter(StopOperations);
             Coordinator = new CaptureSessionCoordinator(
                 () => Factory,
-                new FakeWprController(),
-                new FakeArtifactWriter(() => ReservationError),
+                new FakeWprController(StopOperations),
+                new FakeArtifactWriter(() => ReservationError, StopOperations),
+                ArtifactEvents,
                 Recovery,
                 new ValidTargetValidator());
         }
@@ -123,7 +150,7 @@ public sealed class CaptureSessionCoordinatorTests
         public void Dispose() => Disposed = true;
     }
 
-    private sealed class FakeCaptureSession : INativeCaptureSession
+    private sealed class FakeCaptureSession(List<string> stopOperations) : INativeCaptureSession
     {
         public int StopCalls { get; private set; }
         public bool Disposed { get; private set; }
@@ -132,7 +159,11 @@ public sealed class CaptureSessionCoordinatorTests
         {
         }
 
-        public void Stop() => ++StopCalls;
+        public void Stop()
+        {
+            stopOperations.Add("CaptureStop");
+            ++StopCalls;
+        }
 
         public NativeCaptureStats GetStats() => new(4, 4, 3, 1, 0, 0);
 
@@ -147,7 +178,7 @@ public sealed class CaptureSessionCoordinatorTests
         public void Dispose() => Disposed = true;
     }
 
-    private sealed class FakeArtifactWriter(Func<Exception?> reservationError) : IArtifactWriter
+    private sealed class FakeArtifactWriter(Func<Exception?> reservationError, List<string> stopOperations) : IArtifactWriter
     {
         public ArtifactReservation Reserve(string outputRoot, Guid sessionId, DateTimeOffset startedAtUtc)
         {
@@ -156,6 +187,7 @@ public sealed class CaptureSessionCoordinatorTests
             {
                 throw error;
             }
+            stopOperations.Add("Reserve");
             return new ArtifactReservation(
                 @"D:\Captures\session",
                 @"D:\Captures\session\frames",
@@ -173,8 +205,38 @@ public sealed class CaptureSessionCoordinatorTests
             string? tracePath,
             IReadOnlyList<string> warnings,
             CancellationToken cancellationToken,
-            Func<int, string, ValueTask> progress) => Task.FromResult(
-                new ArtifactWriteResult(reservation.DirectoryPath, reservation.ManifestPath, 3, 0, []));
+            Func<int, string, ValueTask> progress)
+        {
+            stopOperations.Add("Write");
+            return Task.FromResult(new ArtifactWriteResult(reservation.DirectoryPath, reservation.ManifestPath, 3, 0, [], "hash", "Complete"));
+        }
+    }
+
+    private sealed class FakeArtifactEventEmitter(List<string> stopOperations) : IArtifactEventEmitter
+    {
+        public ArtifactReferenceEvent? Reference { get; private set; }
+        public ArtifactCommittedEvent? Committed { get; private set; }
+        public Exception? Error { get; set; }
+
+        public void EmitReference(ArtifactReferenceEvent artifact)
+        {
+            stopOperations.Add("ArtifactReference");
+            if (Error is not null)
+            {
+                throw Error;
+            }
+            Reference = artifact;
+        }
+
+        public void EmitCommitted(ArtifactCommittedEvent artifact)
+        {
+            stopOperations.Add("ArtifactCommitted");
+            if (Error is not null)
+            {
+                throw Error;
+            }
+            Committed = artifact;
+        }
     }
 
     private sealed class FakeRecoveryStore : IRecoveryStore
@@ -199,12 +261,16 @@ public sealed class CaptureSessionCoordinatorTests
         public bool IsValid(CaptureTarget target) => true;
     }
 
-    private sealed class FakeWprController : IWprController
+    private sealed class FakeWprController(List<string> stopOperations) : IWprController
     {
         public Task<WprSession> StartAsync(Guid sessionId, string? userProfileSelector, CancellationToken cancellationToken) =>
             Task.FromResult(new WprSession("test", [], "hash", null, null, null, "staging"));
 
-        public Task StopAsync(WprSession session, string outputPath, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StopAsync(WprSession session, string outputPath, CancellationToken cancellationToken)
+        {
+            stopOperations.Add("WprStop");
+            return Task.CompletedTask;
+        }
 
         public Task CancelAsync(WprSession session, CancellationToken cancellationToken) => Task.CompletedTask;
 

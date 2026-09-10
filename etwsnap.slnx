@@ -8,9 +8,11 @@
     <Project Path="src/EtwSnap.Cli/EtwSnap.Cli.csproj" />
     <Project Path="src/EtwSnap.Host/EtwSnap.Host.csproj" />
     <Project Path="src/EtwSnap.Native/EtwSnap.Native.vcxproj" />
+    <Project Path="src/EtwSnap.WpaPlugin/EtwSnap.WpaPlugin.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EtwSnap.UnitTests/EtwSnap.UnitTests.csproj" />
     <Project Path="tests/EtwSnap.IntegrationTests/EtwSnap.IntegrationTests.csproj" />
+    <Project Path="tests/EtwSnap.WpaPlugin.Tests/EtwSnap.WpaPlugin.Tests.csproj" />
   </Folder>
 </Solution>

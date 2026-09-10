@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text.Json;
 using EtwSnap.Contracts;
 using EtwSnap.Contracts.Models;
@@ -44,7 +45,9 @@ internal sealed record ArtifactWriteResult(
     string ManifestPath,
     int ExportedFrames,
     int FailedFrames,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<string> Errors,
+    string ManifestSha256,
+    string Status);
 
 internal sealed class SessionArtifactWriter : IArtifactWriter
 {
@@ -174,10 +177,11 @@ internal sealed class SessionArtifactWriter : IArtifactWriter
         }
 
         var allWarnings = manifestWarnings.Concat(reservation.Warning is null ? [] : new[] { reservation.Warning }).ToArray();
+        var status = errors.Count == 0 && manifestWarnings.Count == 0 ? "Complete" : "Partial";
         var manifest = new SessionManifest(
-            1,
+            EtwSnapConstants.ManifestSchemaVersion,
             session.SessionId,
-            errors.Count == 0 && manifestWarnings.Count == 0 ? "Complete" : "Partial",
+            status,
             session.StartedAtUtc,
             DateTimeOffset.UtcNow,
             Stopwatch.Frequency,
@@ -205,19 +209,20 @@ internal sealed class SessionArtifactWriter : IArtifactWriter
             errors);
 
         var temporaryManifest = reservation.ManifestPath + ".tmp";
-        await File.WriteAllTextAsync(
-            temporaryManifest,
-            JsonSerializer.Serialize(manifest, ManifestJson),
-            cancellationToken).ConfigureAwait(false);
+        var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest, ManifestJson);
+        await File.WriteAllBytesAsync(temporaryManifest, manifestBytes, cancellationToken).ConfigureAwait(false);
         File.Move(temporaryManifest, reservation.ManifestPath, overwrite: true);
         File.Delete(reservation.ReservationMarker);
+        var manifestSha256 = Convert.ToHexStringLower(SHA256.HashData(manifestBytes));
 
         return new ArtifactWriteResult(
             reservation.DirectoryPath,
             reservation.ManifestPath,
             frames.Count,
             errors.Count,
-            errors);
+            errors,
+            manifestSha256,
+            status);
     }
 
     private static void SavePng(byte[] pixels, uint width, uint height, uint sourceStride, string path)

@@ -1,0 +1,18 @@
+{
+  "identity": {
+    "id": "bgn64.EtwSnap.WpaPlugin",
+    "version": "0.1.0"
+  },
+  "displayName": "ETWSnap",
+  "description": "Correlates ETWSnap screenshot artifacts with ETW events in Windows Performance Analyzer.",
+  "owners": [
+    {
+      "name": "ETWSnap contributors",
+      "address": "",
+      "emailAddresses": [],
+      "phoneNumbers": []
+    }
+  ],
+  "projectUrl": "https://github.com/bgn64/etwsnap",
+  "manifestVersion": 1.0
+}

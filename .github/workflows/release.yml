@@ -43,13 +43,17 @@ jobs:
 
       - name: Package and smoke test
         shell: pwsh
-        run: ./eng/Package.ps1 -Version '${{ steps.version.outputs.version }}' -SkipBuild
+        run: |
+          ./eng/Package.ps1 -Version '${{ steps.version.outputs.version }}' -SkipBuild
+          ./eng/Package-WpaPlugin.ps1 -Version '${{ steps.version.outputs.version }}' -SkipBuild
 
       - name: Attest release package
         if: github.event.repository.visibility == 'public'
         uses: actions/attest@v4
         with:
-          subject-path: artifacts/etwsnap-v${{ steps.version.outputs.version }}-win-x64.zip
+          subject-path: |
+            artifacts/etwsnap-v${{ steps.version.outputs.version }}-win-x64.zip
+            artifacts/etwsnap-wpa-plugin-v${{ steps.version.outputs.version }}.ptix
 
       - name: Publish GitHub Release
         shell: pwsh
@@ -61,9 +65,12 @@ jobs:
           $asset = "artifacts/etwsnap-v$env:VERSION-win-x64.zip"
           $checksum = "$asset.sha256"
           $symbols = "artifacts/etwsnap-v$env:VERSION-win-x64-symbols.zip"
+          $plugin = "artifacts/etwsnap-wpa-plugin-v$env:VERSION.ptix"
+          $pluginChecksum = "$plugin.sha256"
+          $pluginSymbols = "artifacts/etwsnap-wpa-plugin-v$env:VERSION-symbols.zip"
           $tag = '${{ github.ref_name }}'
           if (gh release view $tag 2>$null) {
-            gh release upload $tag $asset $checksum $symbols --clobber
+            gh release upload $tag $asset $checksum $symbols $plugin $pluginChecksum $pluginSymbols --clobber
           }
           else {
             $arguments = @(
@@ -72,7 +79,7 @@ jobs:
               '--title', "ETWSnap v$env:VERSION",
               '--generate-notes',
               '--notes', 'These Windows binaries are currently unsigned. Verify the SHA-256 checksum or GitHub artifact attestation before use.',
-              $asset, $checksum, $symbols
+              $asset, $checksum, $symbols, $plugin, $pluginChecksum, $pluginSymbols
             )
             if ($env:PRERELEASE -eq 'true') {
               $arguments += '--prerelease'

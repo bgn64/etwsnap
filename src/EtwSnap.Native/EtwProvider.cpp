@@ -111,3 +111,42 @@ void EtwProvider::RecordingStopped(
         TraceLoggingUInt64(dropped, "DroppedFrames"),
         TraceLoggingUInt64(errors, "ErrorCount"));
 }
+
+void EtwProvider::ArtifactReference(const EtwSnapArtifactReference& artifact) noexcept
+{
+    TraceLoggingWrite(
+        g_etwSnapProvider,
+        "ArtifactReference",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingUInt32(artifact.ContractVersion, "ContractVersion"),
+        TraceLoggingGuid(artifact.SessionId, "SessionId"),
+        TraceLoggingWideString(artifact.ArtifactDirectory, "ArtifactDirectory"),
+        TraceLoggingWideString(artifact.SessionDirectoryName, "SessionDirectoryName"),
+        TraceLoggingWideString(artifact.ManifestRelativePath, "ManifestRelativePath"),
+        TraceLoggingWideString(artifact.PortableManifestRelativePath, "PortableManifestRelativePath"),
+        TraceLoggingUInt32(artifact.ManifestSchemaVersion, "ManifestSchemaVersion"));
+}
+
+void EtwProvider::ArtifactCommitted(const EtwSnapArtifactCommitted& artifact) noexcept
+{
+    TraceLoggingWrite(
+        g_etwSnapProvider,
+        "ArtifactCommitted",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingUInt32(artifact.ContractVersion, "ContractVersion"),
+        TraceLoggingGuid(artifact.SessionId, "SessionId"),
+        TraceLoggingWideString(artifact.ArtifactDirectory, "ArtifactDirectory"),
+        TraceLoggingWideString(artifact.SessionDirectoryName, "SessionDirectoryName"),
+        TraceLoggingWideString(artifact.ManifestRelativePath, "ManifestRelativePath"),
+        TraceLoggingWideString(artifact.PortableManifestRelativePath, "PortableManifestRelativePath"),
+        TraceLoggingUInt32(artifact.ManifestSchemaVersion, "ManifestSchemaVersion"),
+        TraceLoggingWideString(artifact.ManifestSha256, "ManifestSha256"),
+        TraceLoggingWideString(artifact.Status, "Status"),
+        TraceLoggingUInt64(artifact.AcceptedFrames, "AcceptedFrames"),
+        TraceLoggingUInt64(artifact.RetainedFrames, "RetainedFrames"),
+        TraceLoggingUInt64(artifact.EvictedFrames, "EvictedFrames"),
+        TraceLoggingUInt64(artifact.DroppedFrames, "DroppedFrames"),
+        TraceLoggingUInt64(artifact.ErrorCount, "ErrorCount"),
+        TraceLoggingUInt64(artifact.ExportedFrames, "ExportedFrames"),
+        TraceLoggingUInt64(artifact.FailedFrames, "FailedFrames"));
+}
