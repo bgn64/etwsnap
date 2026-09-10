@@ -105,6 +105,8 @@ D:\Captures\etwsnap-20260904T142530Z-a1b2c3d4\
 
 `manifest.json` records capture settings, provider identity, WPR profile hashes, aggregate frame counts, and each saved frame's correlation metadata. A failed trace stop or failed frame export produces a partial artifact rather than deleting successful output.
 
+ETWSnap also emits versioned artifact-discovery events. `ArtifactReference` is written before ETWSnap stops WPR and identifies the reserved output directory. `ArtifactCommitted` is written after manifest finalization and includes its SHA-256, so it is normally visible only to an external ETW session that continues recording. The complete event contract is documented in [docs/etw-schema.md](docs/etw-schema.md).
+
 ## Correlation Contract
 
 The native callback is the sole authority for frame identity and timing. For each cadence-accepted frame it:
@@ -133,6 +135,7 @@ EtwSnap.Cli       C#/.NET 10 command parsing, host startup, IPC client
 EtwSnap.Contracts C#/.NET 10 versioned length-prefixed JSON contracts
 EtwSnap.Host      C#/.NET 10 session state, WPR, targets, PNGs, manifests
 EtwSnap.Native    C++20 WGC/D3D11 capture, GPU ring, ETW correlation
+EtwSnap.WpaPlugin Public Performance Toolkit SDK processor and WPA tables
 ```
 
 The host is an on-demand per-user process, not a Windows Service. Its mutex and named pipe are scoped by the current user's SID, and the pipe uses current-user-only access. It exits after five idle minutes.
@@ -144,6 +147,7 @@ Frames remain in GPU memory during capture. The ring evicts oldest textures acco
 - x64 Windows 10 or later with Windows Graphics Capture support
 - .NET 10 Runtime for using ETWSnap
 - .NET 10 SDK for building ETWSnap
+- .NET 8 SDK targeting support for building the WPA plugin
 - Visual Studio C++ build tools with C++20 and a Windows SDK
 - Windows Performance Recorder for `--trace`
 - An elevated terminal when WPR requires administrator access
@@ -171,6 +175,8 @@ dotnet test .\tests\EtwSnap.UnitTests\EtwSnap.UnitTests.csproj `
 	-c Release -p:Platform=x64 --no-build
 dotnet test .\tests\EtwSnap.IntegrationTests\EtwSnap.IntegrationTests.csproj `
 	-c Release -p:Platform=x64 --no-build
+dotnet test .\tests\EtwSnap.WpaPlugin.Tests\EtwSnap.WpaPlugin.Tests.csproj `
+	-c Release --no-build
 ```
 
 Integration tests require an interactive Windows desktop. They cover real native capture, PNG/manifest persistence, concurrent IPC, and ETL-to-frame correlation.
@@ -184,5 +190,13 @@ dotnet test .\tests\EtwSnap.IntegrationTests\EtwSnap.IntegrationTests.csproj -p:
 ```
 
 Managed-only builds cannot run `start`; the host reports a clear capture error until `EtwSnap.Native.dll` is built and deployed.
+
+The WPA plugin source, table behavior, and portable multi-session layout are documented in [docs/wpa-plugin.md](docs/wpa-plugin.md). The release workflow publishes the validated plugin as a separate `.ptix` asset with its own SHA-256 and symbols archive.
+
+For local WPA development, load the Release plugin directly from its build directory:
+
+```powershell
+.\eng\Launch-WpaPlugin.ps1 -TracePath <trace.etl>
+```
 
 Release maintainer instructions are in [docs/releasing.md](docs/releasing.md).

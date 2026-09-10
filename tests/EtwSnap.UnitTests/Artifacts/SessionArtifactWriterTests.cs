@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 using EtwSnap.Contracts.Models;
 using EtwSnap.Host.Artifacts;
 using EtwSnap.Host.Capture;
@@ -48,6 +49,10 @@ public sealed class SessionArtifactWriterTests
             Assert.Equal(42UL, frame.GetProperty("frameNumber").GetUInt64());
             Assert.Equal(1234, frame.GetProperty("presentationTime100ns").GetInt64());
             Assert.Equal(5678, frame.GetProperty("callbackQpc").GetInt64());
+            Assert.Equal(
+                Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(result.ManifestPath))),
+                result.ManifestSha256);
+            Assert.Equal("Complete", result.Status);
         }
         finally
         {

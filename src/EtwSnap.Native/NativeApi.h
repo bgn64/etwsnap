@@ -10,7 +10,7 @@
 #define ETWSNAP_API __declspec(dllimport)
 #endif
 
-constexpr std::uint32_t ETWSNAP_API_VERSION = 1;
+constexpr std::uint32_t ETWSNAP_API_VERSION = 2;
 
 enum EtwSnapResult : std::int32_t
 {
@@ -73,9 +73,46 @@ struct EtwSnapStats
     std::uint64_t ErrorCount;
 };
 
+struct EtwSnapArtifactReference
+{
+    std::uint32_t StructSize;
+    std::uint32_t ApiVersion;
+    std::uint32_t ContractVersion;
+    std::uint32_t ManifestSchemaVersion;
+    GUID SessionId;
+    const wchar_t* ArtifactDirectory;
+    const wchar_t* SessionDirectoryName;
+    const wchar_t* ManifestRelativePath;
+    const wchar_t* PortableManifestRelativePath;
+};
+
+struct EtwSnapArtifactCommitted
+{
+    std::uint32_t StructSize;
+    std::uint32_t ApiVersion;
+    std::uint32_t ContractVersion;
+    std::uint32_t ManifestSchemaVersion;
+    GUID SessionId;
+    const wchar_t* ArtifactDirectory;
+    const wchar_t* SessionDirectoryName;
+    const wchar_t* ManifestRelativePath;
+    const wchar_t* PortableManifestRelativePath;
+    const wchar_t* ManifestSha256;
+    const wchar_t* Status;
+    std::uint64_t AcceptedFrames;
+    std::uint64_t RetainedFrames;
+    std::uint64_t EvictedFrames;
+    std::uint64_t DroppedFrames;
+    std::uint64_t ErrorCount;
+    std::uint64_t ExportedFrames;
+    std::uint64_t FailedFrames;
+};
+
 static_assert(sizeof(EtwSnapCreateOptions) == 56);
 static_assert(sizeof(EtwSnapFrameInfo) == 56);
 static_assert(sizeof(EtwSnapStats) == 56);
+static_assert(sizeof(EtwSnapArtifactReference) == 64);
+static_assert(sizeof(EtwSnapArtifactCommitted) == 136);
 static_assert(offsetof(EtwSnapCreateOptions, BufferBytes) == 32);
 static_assert(offsetof(EtwSnapCreateOptions, SessionId) == 40);
 
@@ -97,5 +134,7 @@ extern "C"
         void* destination,
         std::uint64_t destinationBytes,
         std::uint32_t destinationStride) noexcept;
+    ETWSNAP_API EtwSnapResult EtwSnap_EmitArtifactReference(const EtwSnapArtifactReference* artifact) noexcept;
+    ETWSNAP_API EtwSnapResult EtwSnap_EmitArtifactCommitted(const EtwSnapArtifactCommitted* artifact) noexcept;
     ETWSNAP_API EtwSnapResult EtwSnap_GetLastError(wchar_t* destination, std::uint32_t capacity, std::uint32_t* requiredLength) noexcept;
 }

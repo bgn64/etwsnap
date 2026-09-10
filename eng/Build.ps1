@@ -57,11 +57,20 @@ try {
         '--no-incremental',
         '--nologo'
     )
+    Invoke-Checked $dotnet @(
+        'build',
+        'src\EtwSnap.WpaPlugin\EtwSnap.WpaPlugin.csproj',
+        '-c', $configuration,
+        "-p:Version=$Version",
+        '--no-incremental',
+        '--nologo'
+    )
 
     if (-not $SkipTests) {
         foreach ($project in @(
             'tests\EtwSnap.UnitTests\EtwSnap.UnitTests.csproj',
-            'tests\EtwSnap.IntegrationTests\EtwSnap.IntegrationTests.csproj'
+            'tests\EtwSnap.IntegrationTests\EtwSnap.IntegrationTests.csproj',
+            'tests\EtwSnap.WpaPlugin.Tests\EtwSnap.WpaPlugin.Tests.csproj'
         )) {
             Invoke-Checked $dotnet @(
                 'build',
@@ -79,6 +88,15 @@ try {
             'tests\EtwSnap.UnitTests\EtwSnap.UnitTests.csproj',
             '-c', $configuration,
             '-p:Platform=x64',
+            '--no-build',
+            '--nologo',
+            '--verbosity', 'minimal'
+        )
+
+        Invoke-Checked $dotnet @(
+            'test',
+            'tests\EtwSnap.WpaPlugin.Tests\EtwSnap.WpaPlugin.Tests.csproj',
+            '-c', $configuration,
             '--no-build',
             '--nologo',
             '--verbosity', 'minimal'

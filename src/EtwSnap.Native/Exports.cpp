@@ -61,6 +61,16 @@ namespace
     {
         return size == expectedSize && version == ETWSNAP_API_VERSION;
     }
+
+    bool ValidArtifactPaths(
+        const wchar_t* artifactDirectory,
+        const wchar_t* sessionDirectoryName,
+        const wchar_t* manifestRelativePath,
+        const wchar_t* portableManifestRelativePath)
+    {
+        return artifactDirectory != nullptr && sessionDirectoryName != nullptr &&
+            manifestRelativePath != nullptr && portableManifestRelativePath != nullptr;
+    }
 }
 
 extern "C"
@@ -224,6 +234,43 @@ extern "C"
         {
             return TranslateException();
         }
+    }
+
+    EtwSnapResult EtwSnap_EmitArtifactReference(const EtwSnapArtifactReference* artifact) noexcept
+    {
+        if (artifact == nullptr ||
+            !ValidStruct(artifact->StructSize, artifact->ApiVersion, sizeof(EtwSnapArtifactReference)) ||
+            !ValidArtifactPaths(
+                artifact->ArtifactDirectory,
+                artifact->SessionDirectoryName,
+                artifact->ManifestRelativePath,
+                artifact->PortableManifestRelativePath))
+        {
+            SetLastErrorMessage(L"Invalid artifact reference.");
+            return EtwSnapResult_InvalidArgument;
+        }
+
+        EtwProvider::ArtifactReference(*artifact);
+        return EtwSnapResult_Success;
+    }
+
+    EtwSnapResult EtwSnap_EmitArtifactCommitted(const EtwSnapArtifactCommitted* artifact) noexcept
+    {
+        if (artifact == nullptr ||
+            !ValidStruct(artifact->StructSize, artifact->ApiVersion, sizeof(EtwSnapArtifactCommitted)) ||
+            !ValidArtifactPaths(
+                artifact->ArtifactDirectory,
+                artifact->SessionDirectoryName,
+                artifact->ManifestRelativePath,
+                artifact->PortableManifestRelativePath) ||
+            artifact->ManifestSha256 == nullptr || artifact->Status == nullptr)
+        {
+            SetLastErrorMessage(L"Invalid committed artifact.");
+            return EtwSnapResult_InvalidArgument;
+        }
+
+        EtwProvider::ArtifactCommitted(*artifact);
+        return EtwSnapResult_Success;
     }
 
     EtwSnapResult EtwSnap_GetLastError(wchar_t* destination, std::uint32_t capacity, std::uint32_t* requiredLength) noexcept

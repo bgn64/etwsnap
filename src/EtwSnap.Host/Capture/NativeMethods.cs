@@ -5,7 +5,7 @@ namespace EtwSnap.Host.Capture;
 
 internal static class NativeMethods
 {
-    internal const uint ApiVersion = 1;
+    internal const uint ApiVersion = 2;
     private const string LibraryName = "EtwSnap.Native.dll";
 
     internal enum Result : int
@@ -60,6 +60,43 @@ internal static class NativeMethods
         internal ulong ErrorCount;
     }
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    internal struct ArtifactReference
+    {
+        internal uint StructSize;
+        internal uint ApiVersion;
+        internal uint ContractVersion;
+        internal uint ManifestSchemaVersion;
+        internal Guid SessionId;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string ArtifactDirectory;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string SessionDirectoryName;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string ManifestRelativePath;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string PortableManifestRelativePath;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    internal struct ArtifactCommitted
+    {
+        internal uint StructSize;
+        internal uint ApiVersion;
+        internal uint ContractVersion;
+        internal uint ManifestSchemaVersion;
+        internal Guid SessionId;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string ArtifactDirectory;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string SessionDirectoryName;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string ManifestRelativePath;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string PortableManifestRelativePath;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string ManifestSha256;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string Status;
+        internal ulong AcceptedFrames;
+        internal ulong RetainedFrames;
+        internal ulong EvictedFrames;
+        internal ulong DroppedFrames;
+        internal ulong ErrorCount;
+        internal ulong ExportedFrames;
+        internal ulong FailedFrames;
+    }
+
     internal sealed class CaptureSafeHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
         private CaptureSafeHandle() : base(true)
@@ -110,6 +147,12 @@ internal static class NativeMethods
         IntPtr destination,
         ulong destinationBytes,
         uint destinationStride);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    internal static extern Result EtwSnap_EmitArtifactReference(in ArtifactReference artifact);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    internal static extern Result EtwSnap_EmitArtifactCommitted(in ArtifactCommitted artifact);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
     internal static extern Result EtwSnap_GetLastError(IntPtr destination, uint capacity, out uint requiredLength);

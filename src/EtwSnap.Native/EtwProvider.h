@@ -30,4 +30,6 @@ namespace EtwProvider
         std::uint64_t evicted,
         std::uint64_t dropped,
         std::uint64_t errors) noexcept;
+    void ArtifactReference(const EtwSnapArtifactReference& artifact) noexcept;
+    void ArtifactCommitted(const EtwSnapArtifactCommitted& artifact) noexcept;
 }

@@ -20,6 +20,7 @@ Run the complete interactive validation locally:
 ```powershell
 .\eng\Build.ps1 -Version 0.1.0 -IncludeInteractiveTests
 .\eng\Package.ps1 -Version 0.1.0 -SkipBuild
+.\eng\Package-WpaPlugin.ps1 -Version 0.1.0 -SkipBuild
 ```
 
 WPR trace creation should also be tested from an elevated terminal. CI runs unit tests and headless integration tests, but hosted runners do not provide a reliable interactive desktop for capture validation.
@@ -36,7 +37,7 @@ git push origin v0.1.0
 The release workflow:
 
 1. Builds and tests the x64 framework-dependent package.
-2. Creates the portable ZIP, symbols ZIP, and SHA-256 file.
+2. Creates the portable CLI ZIP and WPA plugin PTIX with symbols and SHA-256 files.
 3. Smoke-tests the extracted package.
 4. Generates a GitHub provenance attestation for public repositories.
 5. Publishes the GitHub Release.
@@ -52,6 +53,7 @@ After the workflow completes:
 gh release download v0.1.0
 Get-FileHash .\etwsnap-v0.1.0-win-x64.zip -Algorithm SHA256
 gh attestation verify .\etwsnap-v0.1.0-win-x64.zip --repo bgn64/etwsnap
+gh attestation verify .\etwsnap-wpa-plugin-v0.1.0.ptix --repo bgn64/etwsnap
 ```
 
 Then test Scoop from a clean installation:

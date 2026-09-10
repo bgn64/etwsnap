@@ -36,6 +36,7 @@ internal static class Program
             () => new NativeCaptureFactory(),
             wpr,
             new SessionArtifactWriter(),
+            NativeArtifactEventEmitter.Instance,
             recovery,
             targets);
         var dispatcher = new CommandDispatcher(coordinator, targets);

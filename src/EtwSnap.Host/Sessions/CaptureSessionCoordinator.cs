@@ -2,6 +2,7 @@ using EtwSnap.Contracts.Models;
 using EtwSnap.Contracts.Protocol;
 using EtwSnap.Host.Artifacts;
 using EtwSnap.Host.Capture;
+using EtwSnap.Host.Infrastructure;
 using EtwSnap.Host.Recovery;
 using EtwSnap.Host.Targets;
 using EtwSnap.Host.Tracing;
@@ -12,6 +13,7 @@ internal sealed class CaptureSessionCoordinator(
     Func<INativeCaptureFactory> captureFactory,
     IWprController wpr,
     IArtifactWriter artifacts,
+    IArtifactEventEmitter artifactEvents,
     IRecoveryStore recovery,
     ITargetValidator targets)
 {
@@ -158,8 +160,14 @@ internal sealed class CaptureSessionCoordinator(
                 throw new SessionException(ErrorCodes.OutputFailed, $"The output destination was not accepted; recording is still active. {exception.Message}", exception);
             }
 
-            SetState(CaptureSessionState.StoppingCapture);
             var warnings = new List<string>();
+            var artifactReference = ArtifactEvents.CreateReference(active.Metadata.SessionId, reservation);
+            TryEmitArtifactEvent(
+                () => artifactEvents.EmitReference(artifactReference),
+                "ArtifactReference",
+                warnings);
+
+            SetState(CaptureSessionState.StoppingCapture);
             string? tracePath = null;
             var stage = "stopping native capture";
 
@@ -209,6 +217,10 @@ internal sealed class CaptureSessionCoordinator(
                     cancellationToken,
                     (percent, message) => TryReportProgressAsync(progress, WireMessage.CreateProgress(sourceRequest, percent, message))).ConfigureAwait(false);
 
+                TryEmitArtifactEvent(
+                    () => artifactEvents.EmitCommitted(ArtifactEvents.CreateCommitted(artifactReference, result, stats)),
+                    "ArtifactCommitted");
+
                 active.Dispose();
                 await TryMarkRecoveryAsync(
                     active.Metadata.SessionId,
@@ -235,6 +247,20 @@ internal sealed class CaptureSessionCoordinator(
         finally
         {
             _lifecycleGate.Release();
+        }
+    }
+
+    private static void TryEmitArtifactEvent(Action emit, string eventName, ICollection<string>? warnings = null)
+    {
+        try
+        {
+            emit();
+        }
+        catch (Exception exception)
+        {
+            var message = $"Failed to emit {eventName}: {exception.Message}";
+            warnings?.Add(message);
+            HostLog.Error(message);
         }
     }
 
