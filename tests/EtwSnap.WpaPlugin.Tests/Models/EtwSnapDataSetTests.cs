@@ -75,6 +75,19 @@ public sealed class EtwSnapDataSetTests
         Assert.Equal(0, session.Duration.ToNanoseconds);
     }
 
+    [Fact]
+    public void SameSessionIdInDifferentEtlsRemainsSourceScoped()
+    {
+        var sessionId = Guid.NewGuid();
+        var first = Frame(sessionId, 1, 100) with { SourcePath = @"D:\first.etl" };
+        var second = Frame(sessionId, 2, 200) with { SourcePath = @"D:\second.etl" };
+
+        var dataSet = EtwSnapDataSet.Build([first, second]);
+
+        Assert.Equal(2, dataSet.Sessions.Count);
+        Assert.Equal(2, dataSet.Screenshots.Count);
+    }
+
     private static RecordingStartedEvent Started(Guid sessionId, long nanoseconds) => new(
         Timestamp.FromNanoseconds(nanoseconds), sessionId, 10_000_000, 30, 1024, 0, 0);
 

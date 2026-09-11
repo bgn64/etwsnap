@@ -82,13 +82,20 @@ internal static class ScreenshotTableCommands
 
         var row = rows[rowIndex];
         if (row.Availability != ScreenshotAvailability.Saved ||
-            string.IsNullOrWhiteSpace(row.ImagePath) ||
-            !File.Exists(row.ImagePath))
+            string.IsNullOrWhiteSpace(row.ImagePath))
         {
             return false;
         }
 
-        imagePath = row.ImagePath;
-        return true;
+        try
+        {
+            imagePath = row.MaterializeImage?.Invoke() ?? row.ImagePath;
+            return File.Exists(imagePath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or ArgumentException)
+        {
+            imagePath = string.Empty;
+            return false;
+        }
     }
 }

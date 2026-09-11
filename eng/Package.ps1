@@ -46,6 +46,7 @@ New-Item (Join-Path $stage 'docs') -ItemType Directory -Force | Out-Null
 Copy-Item (Join-Path $root 'docs\releasing.md') (Join-Path $stage 'docs\releasing.md')
 Copy-Item (Join-Path $root 'docs\etw-schema.md') (Join-Path $stage 'docs\etw-schema.md')
 Copy-Item (Join-Path $root 'docs\wpa-plugin.md') (Join-Path $stage 'docs\wpa-plugin.md')
+Copy-Item (Join-Path $root 'docs\embedded-artifacts.md') (Join-Path $stage 'docs\embedded-artifacts.md')
 New-Item (Join-Path $stage 'licenses') -ItemType Directory -Force | Out-Null
 Copy-Item (Join-Path $root 'packages\robmikh.common.0.0.23-beta\LICENSE') `
     (Join-Path $stage 'licenses\robmikh.common.txt')
@@ -53,10 +54,12 @@ Copy-Item (Join-Path $root 'packages\robmikh.common.0.0.23-beta\LICENSE') `
 $required = @(
     'etwsnap.exe',
     'etwsnap.host.exe',
+    'EtwSnap.Artifacts.dll',
     'EtwSnap.Native.dll',
     'etwsnap.runtimeconfig.json',
     'etwsnap.host.runtimeconfig.json',
-    'profiles\EtwSnap.wprp'
+    'profiles\EtwSnap.wprp',
+    'docs\embedded-artifacts.md'
 )
 foreach ($relative in $required) {
     if (-not (Test-Path (Join-Path $stage $relative))) {

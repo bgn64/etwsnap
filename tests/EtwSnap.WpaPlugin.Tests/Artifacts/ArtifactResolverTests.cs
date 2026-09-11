@@ -1,8 +1,11 @@
 using System.Text.Json;
+using EtwSnap.Artifacts;
 using EtwSnap.WpaPlugin.Artifacts;
 using EtwSnap.WpaPlugin.Models;
 using EtwSnap.WpaPlugin.Parsing;
+using EtwSnap.WpaPlugin.Tables;
 using Microsoft.Performance.SDK;
+using Xunit.Sdk;
 
 namespace EtwSnap.WpaPlugin.Tests.Artifacts;
 
@@ -177,6 +180,103 @@ public sealed class ArtifactResolverTests
         Assert.Equal(ArtifactResolutionState.Ambiguous, resolution.State);
     }
 
+    [Fact]
+    public async Task EmbeddedArtifactsWinAndMaterializeOnCommandUse()
+    {
+        using var fixture = new ArtifactFixture();
+        await fixture.RequireNamedStreamsAsync();
+        var sessionId = Guid.NewGuid();
+        var adjacentImage = fixture.WriteManifest(fixture.Root, sessionId, "frames/frame_00000001.png", "folder");
+        Directory.CreateDirectory(Path.GetDirectoryName(adjacentImage)!);
+        File.WriteAllBytes(adjacentImage, [1, 2, 3]);
+        var embeddedImageBytes = new byte[] { 137, 80, 78, 71, 4, 5, 6 };
+        await fixture.WriteEmbeddedBundleAsync(sessionId, embeddedImageBytes);
+        var frame = CreateFrame(sessionId, fixture.TracePath);
+
+        var resolution = new ArtifactResolver().Resolve(sessionId, [frame]);
+        var screenshot = Assert.Single(EtwSnapDataSet.Build([frame]).Screenshots);
+
+        Assert.Equal(ArtifactResolutionState.Resolved, resolution.State);
+        Assert.Empty(resolution.FramePaths);
+        Assert.Single(resolution.EmbeddedFrames!);
+        Assert.Contains(EmbeddedArtifactConstants.StreamPrefix, resolution.ManifestPath);
+        Assert.Equal(ScreenshotAvailability.Saved, screenshot.Availability);
+        Assert.False(File.Exists(screenshot.ImagePath));
+
+        var materializedPath = screenshot.MaterializeImage!();
+        Assert.True(ScreenshotTableCommands.TryCreateViewStartInfo([screenshot], [0], out var startInfo));
+        try
+        {
+            Assert.Equal(materializedPath, startInfo.FileName);
+            Assert.True(File.Exists(startInfo.FileName));
+            Assert.Equal(embeddedImageBytes, await File.ReadAllBytesAsync(startInfo.FileName));
+        }
+        finally
+        {
+            File.Delete(startInfo.FileName);
+        }
+    }
+
+    [Fact]
+    public async Task InvalidEmbeddedStreamIsNotMaskedByValidFolder()
+    {
+        using var fixture = new ArtifactFixture();
+        await fixture.RequireNamedStreamsAsync();
+        var sessionId = Guid.NewGuid();
+        fixture.WriteManifest(fixture.Root, sessionId, "frames/frame_00000001.png");
+        File.WriteAllBytes(
+            new NamedStreamStore().GetStreamPath(fixture.TracePath, EmbeddedArtifactConstants.GetStreamName(sessionId)),
+            "not-a-zip"u8.ToArray());
+
+        var resolution = new ArtifactResolver().Resolve(sessionId, [CreateFrame(sessionId, fixture.TracePath)]);
+
+        Assert.NotEqual(ArtifactResolutionState.Resolved, resolution.State);
+        Assert.NotEqual(ArtifactResolutionState.NotFound, resolution.State);
+    }
+
+    [Fact]
+    public async Task DuplicateFrameBasenamesMaterializeToDistinctCachePaths()
+    {
+        using var fixture = new ArtifactFixture();
+        await fixture.RequireNamedStreamsAsync();
+        var sessionId = Guid.NewGuid();
+        var source = Path.Combine(fixture.Root, "duplicate-source");
+        Directory.CreateDirectory(Path.Combine(source, "frames", "a"));
+        Directory.CreateDirectory(Path.Combine(source, "frames", "b"));
+        await File.WriteAllTextAsync(Path.Combine(source, "manifest.json"), "{\"schemaVersion\":1}");
+        await File.WriteAllBytesAsync(Path.Combine(source, "frames", "a", "image.png"), [1]);
+        await File.WriteAllBytesAsync(Path.Combine(source, "frames", "b", "image.png"), [2]);
+        var zipPath = Path.Combine(fixture.Root, "duplicates.zip");
+        var bundle = new EmbeddedBundle();
+        var descriptor = await bundle.CreateAsync(
+            source,
+            fixture.TracePath,
+            sessionId,
+            EtwSnapTraceParser.ProviderId,
+            1,
+            zipPath,
+            default);
+        var store = new NamedStreamStore();
+        var streamName = EmbeddedArtifactConstants.GetStreamName(sessionId);
+        await store.WriteFromFileAsync(fixture.TracePath, streamName, zipPath, default);
+        var first = new EmbeddedFrameReference(fixture.TracePath, streamName, sessionId, "frames/a/image.png", descriptor);
+        var second = new EmbeddedFrameReference(fixture.TracePath, streamName, sessionId, "frames/b/image.png", descriptor);
+
+        var firstPath = first.Materialize();
+        var secondPath = second.Materialize();
+        try
+        {
+            Assert.NotEqual(firstPath, secondPath);
+            Assert.Equal(new byte[] { 1 }, await File.ReadAllBytesAsync(firstPath));
+            Assert.Equal(new byte[] { 2 }, await File.ReadAllBytesAsync(secondPath));
+        }
+        finally
+        {
+            File.Delete(firstPath);
+            File.Delete(secondPath);
+        }
+    }
+
     private static FrameCapturedEvent CreateFrame(Guid sessionId, string sourcePath) => new(
         Timestamp.FromNanoseconds(100),
         sessionId,
@@ -210,6 +310,7 @@ public sealed class ArtifactResolverTests
             Root = Path.Combine(Path.GetTempPath(), $"etwsnap-wpa-test-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Root);
             TracePath = Path.Combine(Root, "trace.etl");
+            File.WriteAllBytes(TracePath, "etl-primary"u8.ToArray());
         }
 
         public string Root { get; }
@@ -217,6 +318,41 @@ public sealed class ArtifactResolverTests
 
         public string PortableSessionDirectory(Guid sessionId) =>
             Path.Combine(Root, "sessions", sessionId.ToString("N"));
+
+        public async Task RequireNamedStreamsAsync()
+        {
+            try
+            {
+                await new NamedStreamStore().PreflightAsync(Root, default);
+            }
+            catch (IOException)
+            {
+                throw SkipException.ForSkip("The test volume does not support writable named streams.");
+            }
+        }
+
+        public async Task WriteEmbeddedBundleAsync(Guid sessionId, byte[] imageBytes)
+        {
+            var source = Path.Combine(Root, "embedded-source");
+            var imagePath = WriteManifest(source, sessionId, "frames/frame_00000001.png", "embedded");
+            Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+            await File.WriteAllBytesAsync(imagePath, imageBytes);
+            var zipPath = Path.Combine(Root, $"{sessionId:N}.zip");
+            await new EmbeddedBundle().CreateAsync(
+                source,
+                TracePath,
+                sessionId,
+                EtwSnapTraceParser.ProviderId,
+                1,
+                zipPath,
+                default);
+            await new NamedStreamStore().WriteFromFileAsync(
+                TracePath,
+                EmbeddedArtifactConstants.GetStreamName(sessionId),
+                zipPath,
+                default);
+            File.Delete(zipPath);
+        }
 
         public string WriteManifest(
             string sessionDirectory,

@@ -36,6 +36,7 @@ internal static class Program
             () => new NativeCaptureFactory(),
             wpr,
             new SessionArtifactWriter(),
+            new EmbeddedArtifactPublisher(),
             NativeArtifactEventEmitter.Instance,
             recovery,
             targets);

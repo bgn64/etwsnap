@@ -26,7 +26,9 @@ The first plugin version is table-only. It does not provide thumbnails, image pr
 
 ## Artifact discovery
 
-For each full session ID, the plugin checks only these exact candidates:
+For each `(ETL source path, full session ID)`, the plugin first checks the deterministic named stream `EtwSnap.Session.<session-id:N>`. A present stream is fully verified against the ETL primary-stream hash, bundle index, manifest, provider identity, and ETW frame metadata. A valid embedded bundle takes precedence over folders. An invalid stream is reported and is never hidden by a folder fallback.
+
+When the exact stream is absent, the plugin checks only these candidates:
 
 1. The original artifact directory recorded by `ArtifactReference` or `ArtifactCommitted`.
 2. `manifest.json` beside the ETL for an ordinary ETWSnap session directory.
@@ -35,6 +37,8 @@ For each full session ID, the plugin checks only these exact candidates:
 The plugin never recursively scans directories or guesses from frame filenames. Multiple non-identical valid candidates are reported as ambiguous.
 
 A manifest must have a supported schema, matching full session ID and provider GUID, unique frame numbers, contained relative image paths, matching ETW frame metadata, and a matching committed SHA-256 when available. Artifact failures do not hide ETW rows.
+
+Embedded PNGs are not extracted while WPA loads a trace. Their Image Path is an embedded locator until `Open in Default Viewer` or `Reveal in File Explorer` is invoked. The selected verified PNG is then materialized atomically under `%LOCALAPPDATA%\EtwSnap\WpaCache\<etl-hash>\<session-id>`. Cached files are revalidated before reuse; cleanup is bounded to 2 GiB and 30 days. Deleting the cache is always safe.
 
 Portable single-session layout:
 

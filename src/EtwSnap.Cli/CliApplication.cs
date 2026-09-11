@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using EtwSnap.Artifacts;
 using EtwSnap.Cli.IPC;
 using EtwSnap.Contracts;
 using EtwSnap.Contracts.Models;
@@ -25,6 +26,7 @@ internal sealed class CliApplication
         _root.Subcommands.Add(CreateStatusCommand());
         _root.Subcommands.Add(CreateTargetsCommand());
         _root.Subcommands.Add(CreateProviderCommand());
+        _root.Subcommands.Add(CreateArtifactsCommand());
     }
 
     public async Task<int> InvokeAsync(string[] args)
@@ -126,20 +128,28 @@ internal sealed class CliApplication
     private Command CreateStopCommand()
     {
         var outputRoot = new Argument<string>("output-root") { Description = "Directory under which the session artifact will be created." };
+        var embedArtifacts = new Option<bool>("--embed-artifacts") { Description = "Attach session artifacts to the generated ETL when supported." };
         var command = new Command("stop", "Stop recording and save screenshots and any trace.");
         command.Arguments.Add(outputRoot);
+        command.Options.Add(embedArtifacts);
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            var request = new StopCaptureRequest(parseResult.GetValue(outputRoot)!);
+            var request = new StopCaptureRequest(
+                parseResult.GetValue(outputRoot)!,
+                parseResult.GetValue(embedArtifacts) ? ArtifactTransport.Embedded : ArtifactTransport.Folder);
             return await SendAsync<StopCaptureRequest, StopCaptureResult>(
                 CommandKind.Stop,
                 request,
                 result =>
                 {
-                    Console.WriteLine($"Saved {result.ExportedFrames} frames to {result.OutputDirectory}");
+                    Console.WriteLine($"Saved {result.ExportedFrames} frames to {result.ArtifactPath ?? result.OutputDirectory}");
                     if (result.TracePath is not null)
                     {
                         Console.WriteLine($"Trace: {result.TracePath}");
+                    }
+                    if (result.ArtifactWarning is not null)
+                    {
+                        Console.Error.WriteLine($"WARNING: {result.ArtifactWarning}");
                     }
                 },
                 cancellationToken,
@@ -219,6 +229,178 @@ internal sealed class CliApplication
         });
         provider.Subcommands.Add(info);
         return provider;
+    }
+
+    private static Command CreateArtifactsCommand()
+    {
+        var artifacts = new Command("artifacts", "Inspect, add, extract, or remove artifacts embedded in an ETL.");
+        artifacts.Subcommands.Add(CreateArtifactsInspectCommand());
+        artifacts.Subcommands.Add(CreateArtifactsAddCommand());
+        artifacts.Subcommands.Add(CreateArtifactsRemoveCommand());
+        return artifacts;
+    }
+
+    private static Command CreateArtifactsInspectCommand()
+    {
+        var trace = new Argument<string>("trace.etl") { Description = "ETL whose embedded artifacts will be inspected." };
+        var command = new Command("inspect", "Verify and describe embedded ETWSnap artifacts.");
+        command.Arguments.Add(trace);
+        command.SetAction(async (parseResult, cancellationToken) =>
+            await RunArtifactOperationAsync(async () =>
+            {
+                var tracePath = Path.GetFullPath(parseResult.GetValue(trace)!);
+                var inspections = await new EmbeddedArtifactManager().InspectAsync(tracePath, cancellationToken).ConfigureAwait(false);
+                Console.WriteLine($"Trace: {tracePath}");
+                if (inspections.Count == 0)
+                {
+                    Console.WriteLine("Embedded artifacts: none");
+                    return 0;
+                }
+
+                foreach (var inspection in inspections)
+                {
+                    WriteInspection(inspection);
+                }
+                return inspections.All(inspection => inspection.IsValid) ? 0 : OperationError;
+            }).ConfigureAwait(false));
+        return command;
+    }
+
+    private static Command CreateArtifactsAddCommand()
+    {
+        var trace = new Argument<string>("trace.etl") { Description = "Existing ETL that will receive embedded artifacts." };
+        var sessionFolder = new Argument<string>("session-folder") { Description = "Completed ETWSnap session folder to embed." };
+        var command = new Command("add", "Add a completed session's artifacts to an ETL.");
+        command.Arguments.Add(trace);
+        command.Arguments.Add(sessionFolder);
+        command.SetAction(async (parseResult, cancellationToken) =>
+            await RunArtifactOperationAsync(async () =>
+            {
+                var tracePath = Path.GetFullPath(parseResult.GetValue(trace)!);
+                var session = await SessionArtifactFolder.ValidateAsync(
+                    parseResult.GetValue(sessionFolder)!,
+                    EtwSnapConstants.ProviderId,
+                    EtwSnapConstants.ManifestSchemaVersion,
+                    cancellationToken).ConfigureAwait(false);
+                EtlSessionValidator.RequireSession(tracePath, session.Manifest.SessionId, EtwSnapConstants.ProviderId);
+                var result = await new EmbeddedArtifactManager().AddAsync(tracePath, session, cancellationToken).ConfigureAwait(false);
+                Console.WriteLine($"Added session {result.Bundle.Descriptor.SessionId:N} to {result.EtlPath}");
+                Console.WriteLine($"Stream: {result.StreamName}");
+                Console.WriteLine($"Frames: {result.Bundle.Descriptor.Entries.Count(entry => entry.Path.StartsWith("frames/", StringComparison.Ordinal))}");
+                return 0;
+            }).ConfigureAwait(false));
+        return command;
+    }
+
+    private static Command CreateArtifactsRemoveCommand()
+    {
+        var trace = new Argument<string>("trace.etl") { Description = "ETL whose embedded artifacts will be removed." };
+        var session = new Option<Guid?>("--session") { Description = "Remove only the specified session. All sessions are selected by default." };
+        var outputRoot = new Option<string?>("--output-root") { Description = "Extract and verify selected artifacts here before removal." };
+        var force = new Option<bool>("--force") { Description = "Bypass destructive-removal confirmation." };
+        var command = new Command("remove", "Extract or discard embedded ETWSnap artifacts, then remove their streams.");
+        command.Arguments.Add(trace);
+        command.Options.Add(session);
+        command.Options.Add(outputRoot);
+        command.Options.Add(force);
+        command.SetAction(async (parseResult, cancellationToken) =>
+            await RunArtifactOperationAsync(async () =>
+            {
+                var tracePath = Path.GetFullPath(parseResult.GetValue(trace)!);
+                var manager = new EmbeddedArtifactManager();
+                var inspections = await manager.InspectAsync(tracePath, cancellationToken).ConfigureAwait(false);
+                var requestedSession = parseResult.GetValue(session);
+                var selected = requestedSession is null
+                    ? inspections
+                    : inspections.Where(item => item.SessionId == requestedSession).ToArray();
+                if (selected.Count == 0)
+                {
+                    throw new EmbeddedArtifactException(requestedSession is null
+                        ? "The ETL contains no embedded ETWSnap artifacts."
+                        : $"The ETL contains no embedded artifacts for session {requestedSession:N}.");
+                }
+
+                var extractionRoot = parseResult.GetValue(outputRoot);
+                if (extractionRoot is not null)
+                {
+                    var extraction = await manager.ExtractAsync(tracePath, selected, extractionRoot, cancellationToken).ConfigureAwait(false);
+                    manager.Remove(tracePath, selected);
+                    Console.WriteLine($"Extracted {selected.Count} session(s) to {extraction.OutputDirectory}");
+                    Console.WriteLine($"Removed {selected.Count} embedded artifact stream(s) from {tracePath}");
+                    return 0;
+                }
+
+                WriteRemovalWarning(tracePath, selected);
+                if (!parseResult.GetValue(force))
+                {
+                    if (Console.IsInputRedirected)
+                    {
+                        throw new EmbeddedArtifactException("Destructive removal requires --force when input is redirected.");
+                    }
+                    Console.Write("Remove these artifacts permanently? [y/N]: ");
+                    var answer = Console.ReadLine();
+                    if (!string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(answer, "yes", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.WriteLine("No artifacts were removed.");
+                        return 0;
+                    }
+                }
+
+                manager.Remove(tracePath, selected);
+                Console.WriteLine($"Removed {selected.Count} embedded artifact stream(s) from {tracePath}");
+                return 0;
+            }).ConfigureAwait(false));
+        return command;
+    }
+
+    private static async Task<int> RunArtifactOperationAsync(Func<Task<int>> operation)
+    {
+        try
+        {
+            return await operation().ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException or InvalidOperationException or OverflowException or System.ComponentModel.Win32Exception or System.Text.Json.JsonException)
+        {
+            Console.Error.WriteLine($"Artifact error: {exception.Message}");
+            return OperationError;
+        }
+    }
+
+    private static void WriteInspection(EmbeddedStreamInspection inspection)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"Session: {inspection.SessionId?.ToString("N") ?? "unknown"}");
+        Console.WriteLine($"Stream: {inspection.Stream.Name}");
+        Console.WriteLine($"Status: {(inspection.IsValid ? "Valid" : "Invalid")}");
+        Console.WriteLine($"Stream bytes: {inspection.Stream.Size}");
+        if (inspection.Bundle is not null)
+        {
+            Console.WriteLine($"Expanded bytes: {inspection.Bundle.ExpandedBytes}");
+            Console.WriteLine($"Frames: {inspection.Bundle.Descriptor.Entries.Count(entry => entry.Path.StartsWith("frames/", StringComparison.Ordinal))}");
+            Console.WriteLine($"Manifest SHA-256: {inspection.Bundle.Descriptor.ManifestSha256}");
+            Console.WriteLine($"ETL SHA-256: {inspection.Bundle.Descriptor.PrimaryEtlSha256}");
+        }
+        if (inspection.Error is not null)
+        {
+            Console.WriteLine($"Reason: {inspection.Error}");
+        }
+    }
+
+    private static void WriteRemovalWarning(string tracePath, IReadOnlyList<EmbeddedStreamInspection> selected)
+    {
+        Console.WriteLine("WARNING: This permanently deletes embedded ETWSnap artifacts.");
+        Console.WriteLine($"Trace: {tracePath}");
+        foreach (var inspection in selected)
+        {
+            var frameCount = inspection.Bundle?.Descriptor.Entries.Count(entry => entry.Path.StartsWith("frames/", StringComparison.Ordinal));
+            Console.WriteLine(
+                $"  Session {inspection.SessionId?.ToString("N") ?? "unknown"}: " +
+                $"{(inspection.IsValid ? "Valid" : "Invalid")}, " +
+                $"{(frameCount is null ? "unknown frames" : $"{frameCount} frames")}, " +
+                $"{inspection.Stream.Size} bytes");
+        }
+        Console.WriteLine("This operation is irreversible unless the artifacts exist elsewhere.");
     }
 
     private async Task<int> SendAsync<TRequest, TResponse>(

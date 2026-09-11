@@ -1,3 +1,5 @@
+using EtwSnap.Contracts.Protocol;
+
 namespace EtwSnap.Host.Infrastructure;
 
 internal sealed class HostInstanceLock : IDisposable
@@ -14,7 +16,7 @@ internal sealed class HostInstanceLock : IDisposable
         var path = lockPath ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "EtwSnap",
-            "host.lock");
+            $"host-v{ProtocolConstants.CurrentVersion}.lock");
         var directory = Path.GetDirectoryName(path)
             ?? throw new ArgumentException("The lock path must have a parent directory.", nameof(lockPath));
         Directory.CreateDirectory(directory);

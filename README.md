@@ -66,6 +66,25 @@ etwsnap stop D:\Captures
 
 The destination is reserved before capture stops. If it is invalid or unwritable, recording remains active so `stop` can be retried with another path.
 
+For a session started with `--trace`, artifacts can instead be attached to a standalone ETL on NTFS:
+
+```powershell
+etwsnap stop D:\Captures --embed-artifacts
+```
+
+The ETL primary bytes remain an ordinary ETL. If embedded publication is unsupported or fails, ETWSnap saves the normal session folder and prints a prominent warning. Folder output remains the default.
+
+Inspect, add, extract, or remove embedded artifacts without starting the capture host:
+
+```powershell
+etwsnap artifacts inspect D:\Captures\trace.etl
+etwsnap artifacts add D:\Captures\trace.etl D:\Captures\etwsnap-session
+etwsnap artifacts remove D:\Captures\trace.etl --output-root D:\Extracted
+etwsnap artifacts remove D:\Captures\trace.etl --session <session-id> --force
+```
+
+See [docs/embedded-artifacts.md](docs/embedded-artifacts.md) before copying or deleting embedded artifacts; ordinary copy, archive, and upload tools may discard NTFS named streams.
+
 Other commands:
 
 ```powershell
@@ -132,6 +151,7 @@ The native capture path deliberately retains `robmikh.common` 0.0.23-beta, Windo
 
 ```text
 EtwSnap.Cli       C#/.NET 10 command parsing, host startup, IPC client
+EtwSnap.Artifacts C#/.NET 8 named-stream, ZIP, validation, and extraction core
 EtwSnap.Contracts C#/.NET 10 versioned length-prefixed JSON contracts
 EtwSnap.Host      C#/.NET 10 session state, WPR, targets, PNGs, manifests
 EtwSnap.Native    C++20 WGC/D3D11 capture, GPU ring, ETW correlation

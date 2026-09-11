@@ -38,7 +38,8 @@ internal sealed record ArtifactReservation(
     string ManifestPath,
     string TracePath,
     string ReservationMarker,
-    string? Warning);
+    string? Warning,
+    bool DeferFinalization = false);
 
 internal sealed record ArtifactWriteResult(
     string OutputDirectory,
@@ -62,7 +63,7 @@ internal sealed class SessionArtifactWriter : IArtifactWriter
         var canonicalRoot = Path.GetFullPath(outputRoot);
         Directory.CreateDirectory(canonicalRoot);
 
-        var directoryName = $"etwsnap-{startedAtUtc.UtcDateTime:yyyyMMddTHHmmssZ}-{sessionId.ToString("N")[..8]}";
+        var directoryName = GetDirectoryName(sessionId, startedAtUtc);
         var directoryPath = Path.Combine(canonicalRoot, directoryName);
         if (Directory.Exists(directoryPath))
         {
@@ -212,7 +213,10 @@ internal sealed class SessionArtifactWriter : IArtifactWriter
         var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest, ManifestJson);
         await File.WriteAllBytesAsync(temporaryManifest, manifestBytes, cancellationToken).ConfigureAwait(false);
         File.Move(temporaryManifest, reservation.ManifestPath, overwrite: true);
-        File.Delete(reservation.ReservationMarker);
+        if (!reservation.DeferFinalization)
+        {
+            File.Delete(reservation.ReservationMarker);
+        }
         var manifestSha256 = Convert.ToHexStringLower(SHA256.HashData(manifestBytes));
 
         return new ArtifactWriteResult(
@@ -272,4 +276,7 @@ internal sealed class SessionArtifactWriter : IArtifactWriter
             return "Available output disk space could not be determined.";
         }
     }
+
+    internal static string GetDirectoryName(Guid sessionId, DateTimeOffset startedAtUtc) =>
+        $"etwsnap-{startedAtUtc.UtcDateTime:yyyyMMddTHHmmssZ}-{sessionId.ToString("N")[..8]}";
 }
