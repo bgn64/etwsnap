@@ -23,7 +23,8 @@ public sealed record ScreenshotRecord(
     uint Height,
     uint PixelFormat,
     long PresentationTime100ns,
-    long CallbackQpc);
+    long CallbackQpc,
+    Func<string>? MaterializeImage = null);
 
 public sealed record SessionRecord(
     Timestamp StartTime,
@@ -54,14 +55,14 @@ public sealed record EtwSnapDataSet(
         var screenshots = new List<ScreenshotRecord>();
         var sessions = new List<SessionRecord>();
 
-        foreach (var group in sourceEvents.GroupBy(item => item.SessionId))
+        foreach (var group in sourceEvents.GroupBy(item => new { item.SessionId, item.SourcePath }))
         {
             var events = group.OrderBy(item => item.Timestamp.ToNanoseconds).ToArray();
             var frames = events.OfType<FrameCapturedEvent>().OrderBy(frame => frame.Timestamp.ToNanoseconds).ToArray();
             var started = events.OfType<RecordingStartedEvent>().FirstOrDefault();
             var stopped = events.OfType<RecordingStoppedEvent>().LastOrDefault();
             var committed = events.OfType<ArtifactCommittedEvent>().LastOrDefault();
-            var resolution = resolver.Resolve(group.Key, events);
+            var resolution = resolver.Resolve(group.Key.SessionId, events);
             var sessionStart = started?.Timestamp ?? frames.FirstOrDefault()?.Timestamp ?? events.First().Timestamp;
             var sessionStop = stopped?.Timestamp ?? frames.LastOrDefault()?.Timestamp ?? events.Last().Timestamp;
 
@@ -70,11 +71,14 @@ public sealed record EtwSnapDataSet(
                 var frame = frames[index];
                 var stop = index + 1 < frames.Length ? frames[index + 1].Timestamp : sessionStop;
                 var durationNanoseconds = Math.Max(0, stop.ToNanoseconds - frame.Timestamp.ToNanoseconds);
-                var hasManifestFrame = resolution.FramePaths.TryGetValue(frame.FrameNumber, out var imagePath);
+                var hasFileFrame = resolution.FramePaths.TryGetValue(frame.FrameNumber, out var imagePath);
+                EmbeddedFrameReference? embeddedFrame = null;
+                var hasEmbeddedFrame = resolution.EmbeddedFrames?.TryGetValue(frame.FrameNumber, out embeddedFrame) == true;
+                var hasManifestFrame = hasFileFrame || hasEmbeddedFrame;
                 screenshots.Add(new ScreenshotRecord(
                     frame.Timestamp,
                     TimestampDelta.FromNanoseconds(durationNanoseconds),
-                    group.Key,
+                    group.Key.SessionId,
                     frame.FrameNumber,
                     hasManifestFrame
                         ? ScreenshotAvailability.Saved
@@ -83,18 +87,19 @@ public sealed record EtwSnapDataSet(
                                 ? ScreenshotAvailability.MissingFile
                                 : ScreenshotAvailability.NotPersisted
                             : ScreenshotAvailability.ArtifactUnavailable,
-                    hasManifestFrame ? imagePath : null,
+                    hasFileFrame ? imagePath : hasEmbeddedFrame ? embeddedFrame!.DisplayPath : null,
                     frame.Width,
                     frame.Height,
                     frame.PixelFormat,
                     frame.PresentationTime100ns,
-                    frame.CallbackQpc));
+                    frame.CallbackQpc,
+                    hasEmbeddedFrame ? embeddedFrame!.Materialize : null));
             }
 
             sessions.Add(new SessionRecord(
                 sessionStart,
                 TimestampDelta.FromNanoseconds(Math.Max(0, sessionStop.ToNanoseconds - sessionStart.ToNanoseconds)),
-                group.Key,
+                group.Key.SessionId,
                 started?.FramesPerSecond,
                 started?.BufferBytes,
                 started?.TargetKind,

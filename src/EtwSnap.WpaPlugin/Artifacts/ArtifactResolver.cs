@@ -32,6 +32,11 @@ public sealed class ArtifactResolver
             .OfType<FrameCapturedEvent>()
             .GroupBy(frame => frame.FrameNumber)
             .ToDictionary(group => group.Key, group => group.First());
+        var embedded = ResolveEmbedded(sessionId, events, expectedHash, frames);
+        if (embedded is not null)
+        {
+            return embedded;
+        }
         var candidates = GetCandidates(sessionId, events, references, commits).ToArray();
         var valid = new List<ValidatedCandidate>();
         var sawIntegrityMismatch = false;
@@ -95,6 +100,148 @@ public sealed class ArtifactResolver
             selected.ManifestFrameNumbers,
             selected.Statistics,
             detail);
+    }
+
+    private static ArtifactResolution? ResolveEmbedded(
+        Guid sessionId,
+        IReadOnlyList<EtwSnapEvent> events,
+        string? expectedManifestHash,
+        IReadOnlyDictionary<ulong, FrameCapturedEvent> traceFrames)
+    {
+        var sourcePaths = events.Select(item => item.SourcePath)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (sourcePaths.Length == 0 || sourcePaths.Length == 1 && !File.Exists(sourcePaths[0]))
+        {
+            return null;
+        }
+        if (sourcePaths.Length != 1)
+        {
+            return ArtifactResolution.Unresolved(
+                ArtifactResolutionState.Ambiguous,
+                "The session events came from multiple ETL sources.");
+        }
+
+        var etlPath = sourcePaths[0];
+        var streamName = EtwSnap.Artifacts.EmbeddedArtifactConstants.GetStreamName(sessionId);
+        var streams = new EtwSnap.Artifacts.NamedStreamStore();
+        FileStream stream;
+        try
+        {
+            stream = streams.OpenRead(etlPath, streamName);
+        }
+        catch (FileNotFoundException)
+        {
+            return null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return ArtifactResolution.Unresolved(ArtifactResolutionState.InvalidManifest, exception.Message);
+        }
+
+        using (stream)
+        {
+            try
+            {
+                var inspection = new EtwSnap.Artifacts.EmbeddedBundle().InspectAsync(
+                    stream,
+                    etlPath,
+                    sessionId,
+                    CancellationToken.None).GetAwaiter().GetResult();
+                var descriptor = inspection.Descriptor;
+                if (descriptor.ProviderId != ProviderId ||
+                    descriptor.ManifestSchemaVersion != SupportedManifestSchemaVersion)
+                {
+                    return ArtifactResolution.Unresolved(
+                        ArtifactResolutionState.UnsupportedVersion,
+                        "The embedded bundle provider or manifest schema is not supported.");
+                }
+                if (!string.IsNullOrWhiteSpace(expectedManifestHash) &&
+                    !string.Equals(descriptor.ManifestSha256, expectedManifestHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    return ArtifactResolution.Unresolved(
+                        ArtifactResolutionState.IntegrityMismatch,
+                        "The embedded manifest does not match the committed SHA-256.");
+                }
+
+                var manifest = JsonSerializer.Deserialize<SessionManifest>(inspection.ManifestBytes, ManifestJson);
+                if (manifest is null || manifest.Provider is null || manifest.Statistics is null || manifest.Frames is null ||
+                    manifest.SchemaVersion != SupportedManifestSchemaVersion || manifest.SessionId != sessionId ||
+                    manifest.Provider.Id != ProviderId || manifest.Statistics.ExportedFrames < 0 ||
+                    manifest.Statistics.FailedFrames < 0 ||
+                    manifest.Statistics.ExportedFrames != manifest.Frames.Count ||
+                    manifest.Frames.Select(frame => frame.FrameNumber).Distinct().Count() != manifest.Frames.Count)
+                {
+                    return ArtifactResolution.Unresolved(
+                        ArtifactResolutionState.InvalidManifest,
+                        "The embedded manifest identity, statistics, or frame list is invalid.");
+                }
+
+                var indexedPaths = descriptor.Entries.ToDictionary(entry => entry.Path, StringComparer.Ordinal);
+                var embeddedFrames = new Dictionary<ulong, EmbeddedFrameReference>();
+                var manifestFrameNumbers = new HashSet<ulong>();
+                foreach (var frame in manifest.Frames)
+                {
+                    manifestFrameNumbers.Add(frame.FrameNumber);
+                    var entryPath = EtwSnap.Artifacts.EmbeddedBundle.NormalizeEntryName(frame.Path);
+                    if (!entryPath.StartsWith("frames/", StringComparison.Ordinal) ||
+                        !entryPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                        !indexedPaths.ContainsKey(entryPath))
+                    {
+                        return ArtifactResolution.Unresolved(
+                            ArtifactResolutionState.InvalidManifest,
+                            $"The embedded frame entry is invalid: {entryPath}");
+                    }
+                    if (!traceFrames.TryGetValue(frame.FrameNumber, out var traceFrame) ||
+                        frame.PresentationTime100ns != traceFrame.PresentationTime100ns ||
+                         frame.CallbackQpc != traceFrame.CallbackQpc ||
+                         frame.Width != traceFrame.Width ||
+                         frame.Height != traceFrame.Height ||
+                         frame.PixelFormat != traceFrame.PixelFormat)
+                    {
+                        return ArtifactResolution.Unresolved(
+                            ArtifactResolutionState.InvalidManifest,
+                            $"Embedded frame metadata does not match ETW for frame {frame.FrameNumber}.");
+                    }
+                    embeddedFrames.Add(
+                        frame.FrameNumber,
+                        new EmbeddedFrameReference(etlPath, streamName, sessionId, entryPath, descriptor));
+                }
+
+                var statistics = new ArtifactStatistics(
+                    manifest.Statistics.AcceptedFrames,
+                    manifest.Statistics.RetainedFrames,
+                    manifest.Statistics.EvictedFrames,
+                    manifest.Statistics.DroppedFrames,
+                    manifest.Statistics.NativeErrors,
+                    checked((ulong)manifest.Statistics.ExportedFrames),
+                    checked((ulong)manifest.Statistics.FailedFrames));
+                var diagnosticCandidate = new ValidatedCandidate(
+                    $"{etlPath}:{streamName}!/{EtwSnap.Artifacts.EmbeddedArtifactConstants.ManifestFileName}",
+                    descriptor.ManifestSha256,
+                    new Dictionary<ulong, string>(),
+                    manifestFrameNumbers,
+                    statistics);
+                return new ArtifactResolution(
+                    ArtifactResolutionState.Resolved,
+                    diagnosticCandidate.ManifestPath,
+                    diagnosticCandidate.FramePaths,
+                    manifestFrameNumbers,
+                    statistics,
+                    BuildDiagnostics(diagnosticCandidate, events.OfType<RecordingStoppedEvent>().LastOrDefault()),
+                    embeddedFrames);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or JsonException or ArgumentException or InvalidOperationException or OverflowException)
+            {
+                var state = exception.Message.Contains("hash", StringComparison.OrdinalIgnoreCase) ||
+                    exception.Message.Contains("belong", StringComparison.OrdinalIgnoreCase)
+                    ? ArtifactResolutionState.IntegrityMismatch
+                    : ArtifactResolutionState.InvalidManifest;
+                return ArtifactResolution.Unresolved(state, exception.Message);
+            }
+        }
     }
 
     private static IEnumerable<string> GetCandidates(
@@ -188,12 +335,12 @@ public sealed class ArtifactResolver
             foreach (var frame in manifest.Frames)
             {
                 manifestFrameNumbers.Add(frame.FrameNumber);
-                if (traceFrames.TryGetValue(frame.FrameNumber, out var traceFrame) &&
-                    (frame.PresentationTime100ns != traceFrame.PresentationTime100ns ||
+                if (!traceFrames.TryGetValue(frame.FrameNumber, out var traceFrame) ||
+                    frame.PresentationTime100ns != traceFrame.PresentationTime100ns ||
                      frame.CallbackQpc != traceFrame.CallbackQpc ||
                      frame.Width != traceFrame.Width ||
                      frame.Height != traceFrame.Height ||
-                     frame.PixelFormat != traceFrame.PixelFormat))
+                     frame.PixelFormat != traceFrame.PixelFormat)
                 {
                     return new CandidateValidation(ArtifactResolutionState.InvalidManifest, null);
                 }

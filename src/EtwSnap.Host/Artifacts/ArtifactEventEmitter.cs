@@ -95,12 +95,15 @@ internal sealed class NativeArtifactEventEmitter : IArtifactEventEmitter
 internal static class ArtifactEvents
 {
     public static ArtifactReferenceEvent CreateReference(Guid sessionId, ArtifactReservation reservation)
+        => CreateReference(sessionId, reservation.DirectoryPath);
+
+    public static ArtifactReferenceEvent CreateReference(Guid sessionId, string artifactDirectory)
     {
-        var sessionDirectoryName = Path.GetFileName(reservation.DirectoryPath);
+        var sessionDirectoryName = Path.GetFileName(artifactDirectory);
         return new ArtifactReferenceEvent(
             EtwSnapConstants.ArtifactContractVersion,
             sessionId,
-            reservation.DirectoryPath,
+            artifactDirectory,
             sessionDirectoryName,
             EtwSnapConstants.ManifestFileName,
             $"sessions/{sessionId:N}/{EtwSnapConstants.ManifestFileName}",

@@ -11,6 +11,7 @@
     <PackageReference Include="Microsoft.Performance.SDK" Version="1.2.2-preview">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
+    <ProjectReference Include="..\EtwSnap.Artifacts\EtwSnap.Artifacts.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="pluginManifest.json" CopyToOutputDirectory="PreserveNewest" />

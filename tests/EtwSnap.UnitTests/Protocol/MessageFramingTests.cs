@@ -38,6 +38,21 @@ public sealed class MessageFramingTests
         Assert.Equal("Saving screenshots", result.Message);
     }
 
+    [Fact]
+    public async Task EmbeddedStopTransportRoundTrips()
+    {
+        var request = WireMessage.CreateRequest(
+            CommandKind.Stop,
+            new StopCaptureRequest(@"D:\Captures", ArtifactTransport.Embedded));
+        await using var stream = new MemoryStream();
+
+        await MessageFraming.WriteAsync(stream, request);
+        stream.Position = 0;
+        var result = await MessageFraming.ReadAsync(stream);
+
+        Assert.Equal(ArtifactTransport.Embedded, result.ReadPayload<StopCaptureRequest>().ArtifactTransport);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]

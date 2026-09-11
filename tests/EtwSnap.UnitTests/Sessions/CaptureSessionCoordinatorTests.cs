@@ -102,6 +102,99 @@ public sealed class CaptureSessionCoordinatorTests
         Assert.Equal(CaptureSessionState.Idle, fixture.Coordinator.GetStatus().State);
     }
 
+    [Fact]
+    public async Task EmbeddedStopWithoutTraceIsRejectedBeforeCaptureStops()
+    {
+        var fixture = new CoordinatorFixture();
+        await fixture.Coordinator.StartAsync(CreateRequest(), default);
+        var request = WireMessage.CreateRequest(
+            CommandKind.Stop,
+            new StopCaptureRequest(@"D:\Captures", ArtifactTransport.Embedded));
+
+        var exception = await Assert.ThrowsAsync<SessionException>(() => fixture.Coordinator.StopAsync(
+            request.ReadPayload<StopCaptureRequest>(),
+            _ => ValueTask.CompletedTask,
+            request,
+            default));
+
+        Assert.Equal(ErrorCodes.InvalidRequest, exception.ErrorCode);
+        Assert.Equal(0, fixture.Capture.StopCalls);
+        Assert.Equal(CaptureSessionState.Capturing, fixture.Coordinator.GetStatus().State);
+        await fixture.Coordinator.CancelAsync(default);
+    }
+
+    [Fact]
+    public async Task EmbeddedStopPublishesStandaloneEtl()
+    {
+        var fixture = new CoordinatorFixture();
+        await fixture.Coordinator.StartAsync(CreateRequest() with { Trace = true }, default);
+        var request = WireMessage.CreateRequest(
+            CommandKind.Stop,
+            new StopCaptureRequest(@"D:\Captures", ArtifactTransport.Embedded));
+
+        var result = await fixture.Coordinator.StopAsync(
+            request.ReadPayload<StopCaptureRequest>(),
+            _ => ValueTask.CompletedTask,
+            request,
+            default);
+
+        Assert.Equal(ArtifactTransport.Embedded, result.RequestedArtifactTransport);
+        Assert.Equal(ArtifactTransport.Embedded, result.ActualArtifactTransport);
+        Assert.Equal(@"D:\Captures\session.etl", result.ArtifactPath);
+        Assert.Null(result.OutputDirectory);
+        Assert.Equal(
+            ["EmbeddedReserve", "ArtifactReference", "CaptureStop", "WprStop", "Write", "EmbeddedPublish", "ArtifactCommitted"],
+            fixture.StopOperations);
+    }
+
+    [Fact]
+    public async Task EmbeddedReservationFailureFallsBackBeforeCaptureStops()
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.EmbeddedPublisher.ReservationError = new IOException("streams unsupported");
+        await fixture.Coordinator.StartAsync(CreateRequest() with { Trace = true }, default);
+        var request = WireMessage.CreateRequest(
+            CommandKind.Stop,
+            new StopCaptureRequest(@"D:\Captures", ArtifactTransport.Embedded));
+
+        var result = await fixture.Coordinator.StopAsync(
+            request.ReadPayload<StopCaptureRequest>(),
+            _ => ValueTask.CompletedTask,
+            request,
+            default);
+
+        Assert.Equal(ArtifactTransport.Folder, result.ActualArtifactTransport);
+        Assert.Contains("streams unsupported", result.ArtifactWarning);
+        Assert.Equal(["EmbeddedReserve", "Reserve", "ArtifactReference", "CaptureStop", "WprStop", "Write", "ArtifactCommitted"], fixture.StopOperations);
+    }
+
+    [Fact]
+    public async Task EmbeddedPublicationFailureReturnsFolderAndWarning()
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.EmbeddedPublisher.Publication = new ArtifactPublication(
+            ArtifactTransport.Folder,
+            @"D:\Captures\session",
+            @"D:\Captures\session\manifest.json",
+            @"D:\Captures\session\trace.etl",
+            @"D:\Captures\session",
+            "Embedded artifact publication failed; saved a normal session folder instead. disk full");
+        await fixture.Coordinator.StartAsync(CreateRequest() with { Trace = true }, default);
+        var request = WireMessage.CreateRequest(
+            CommandKind.Stop,
+            new StopCaptureRequest(@"D:\Captures", ArtifactTransport.Embedded));
+
+        var result = await fixture.Coordinator.StopAsync(
+            request.ReadPayload<StopCaptureRequest>(),
+            _ => ValueTask.CompletedTask,
+            request,
+            default);
+
+        Assert.Equal(ArtifactTransport.Folder, result.ActualArtifactTransport);
+        Assert.Equal(@"D:\Captures\session", result.OutputDirectory);
+        Assert.Contains("disk full", result.ArtifactWarning);
+    }
+
     private static StartCaptureRequest CreateRequest() => new(
         false,
         null,
@@ -116,6 +209,7 @@ public sealed class CaptureSessionCoordinatorTests
         public FakeCaptureSession Capture { get; }
         public FakeCaptureFactory Factory { get; }
         public FakeArtifactEventEmitter ArtifactEvents { get; }
+        public FakeEmbeddedArtifactPublisher EmbeddedPublisher { get; }
         public FakeRecoveryStore Recovery { get; } = new();
         public Exception? ReservationError { get; set; }
 
@@ -124,16 +218,65 @@ public sealed class CaptureSessionCoordinatorTests
             Capture = new FakeCaptureSession(StopOperations);
             Factory = new FakeCaptureFactory(Capture);
             ArtifactEvents = new FakeArtifactEventEmitter(StopOperations);
+            EmbeddedPublisher = new FakeEmbeddedArtifactPublisher(StopOperations);
             Coordinator = new CaptureSessionCoordinator(
                 () => Factory,
                 new FakeWprController(StopOperations),
                 new FakeArtifactWriter(() => ReservationError, StopOperations),
+                EmbeddedPublisher,
                 ArtifactEvents,
                 Recovery,
                 new ValidTargetValidator());
         }
 
         public CaptureSessionCoordinator Coordinator { get; }
+    }
+
+    private sealed class FakeEmbeddedArtifactPublisher(List<string> stopOperations) : IEmbeddedArtifactPublisher
+    {
+        public Exception? ReservationError { get; set; }
+        public ArtifactPublication Publication { get; set; } = new(
+            ArtifactTransport.Embedded,
+            null,
+            null,
+            @"D:\Captures\session.etl",
+            @"D:\Captures\session.etl",
+            null);
+
+        public Task<EmbeddedArtifactReservation> ReserveAsync(
+            string outputRoot,
+            Guid sessionId,
+            DateTimeOffset startedAtUtc,
+            CancellationToken cancellationToken)
+        {
+            stopOperations.Add("EmbeddedReserve");
+            if (ReservationError is not null)
+            {
+                throw ReservationError;
+            }
+            var staging = new ArtifactReservation(
+                @"D:\Captures\.etwsnap-staging\session",
+                @"D:\Captures\.etwsnap-staging\session\frames",
+                @"D:\Captures\.etwsnap-staging\session\manifest.json",
+                @"D:\Captures\.etwsnap-staging\session\trace.etl",
+                @"D:\Captures\.etwsnap-staging\session\.reserved",
+                null,
+                true);
+            return Task.FromResult(new EmbeddedArtifactReservation(
+                staging,
+                @"D:\Captures\session.etl",
+                @"D:\Captures\session"));
+        }
+
+        public Task<ArtifactPublication> PublishAsync(
+            EmbeddedArtifactReservation reservation,
+            SessionMetadata session,
+            string? fallbackReason,
+            CancellationToken cancellationToken)
+        {
+            stopOperations.Add("EmbeddedPublish");
+            return Task.FromResult(Publication);
+        }
     }
 
     private sealed class FakeCaptureFactory(FakeCaptureSession capture) : INativeCaptureFactory
@@ -242,6 +385,7 @@ public sealed class CaptureSessionCoordinatorTests
     private sealed class FakeRecoveryStore : IRecoveryStore
     {
         public List<string> Statuses { get; } = [];
+        public RecoveryArtifactState? Artifacts { get; private set; }
 
         public Task BeginAsync(Guid sessionId, DateTimeOffset startedAtUtc, StartCaptureRequest request, CancellationToken cancellationToken)
         {
@@ -252,6 +396,12 @@ public sealed class CaptureSessionCoordinatorTests
         public Task MarkAsync(Guid sessionId, string status, string? outputDirectory, string? error, CancellationToken cancellationToken)
         {
             Statuses.Add(status);
+            return Task.CompletedTask;
+        }
+
+        public Task MarkArtifactsAsync(Guid sessionId, RecoveryArtifactState artifacts, CancellationToken cancellationToken)
+        {
+            Artifacts = artifacts;
             return Task.CompletedTask;
         }
     }

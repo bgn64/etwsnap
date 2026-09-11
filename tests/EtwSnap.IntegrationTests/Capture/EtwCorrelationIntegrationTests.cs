@@ -153,7 +153,10 @@ public sealed class EtwCorrelationIntegrationTests
             var pluginEvents = new PluginEventCollector();
             var pluginParser = new EtwSnapTraceParser([new FileDataSource(etlPath)]);
             pluginParser.ProcessSource(pluginEvents, null!, new Progress<int>(), default);
-            Assert.Equal(retainedFrames.Count, pluginEvents.Events.OfType<FrameCapturedEvent>().Count(frame => retainedFrames.ContainsKey(frame.FrameNumber)));
+            Assert.Equal(
+                retainedFrames.Count,
+                pluginEvents.Events.OfType<FrameCapturedEvent>().Count(
+                    frame => frame.SessionId == sessionId && retainedFrames.ContainsKey(frame.FrameNumber)));
             Assert.Single(pluginEvents.Events.OfType<EtwSnap.WpaPlugin.Parsing.ArtifactReferenceEvent>());
             Assert.Single(pluginEvents.Events.OfType<EtwSnap.WpaPlugin.Parsing.ArtifactCommittedEvent>());
         }

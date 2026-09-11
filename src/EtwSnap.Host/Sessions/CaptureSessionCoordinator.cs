@@ -13,6 +13,7 @@ internal sealed class CaptureSessionCoordinator(
     Func<INativeCaptureFactory> captureFactory,
     IWprController wpr,
     IArtifactWriter artifacts,
+    IEmbeddedArtifactPublisher embeddedArtifacts,
     IArtifactEventEmitter artifactEvents,
     IRecoveryStore recovery,
     ITargetValidator targets)
@@ -150,18 +151,62 @@ internal sealed class CaptureSessionCoordinator(
         try
         {
             var active = GetActiveOrThrow();
+            if (!Enum.IsDefined(request.ArtifactTransport))
+            {
+                throw new SessionException(ErrorCodes.InvalidRequest, "The requested artifact transport is not supported.");
+            }
+            if (request.ArtifactTransport == ArtifactTransport.Embedded && active.Metadata.Wpr is null)
+            {
+                throw new SessionException(ErrorCodes.InvalidRequest, "--embed-artifacts requires a session started with --trace.");
+            }
+
+            var warnings = new List<string>();
+            EmbeddedArtifactReservation? embeddedReservation = null;
             ArtifactReservation reservation;
             try
             {
-                reservation = artifacts.Reserve(request.OutputRoot, active.Metadata.SessionId, active.Metadata.StartedAtUtc);
+                if (request.ArtifactTransport == ArtifactTransport.Embedded)
+                {
+                    try
+                    {
+                        embeddedReservation = await embeddedArtifacts.ReserveAsync(
+                            request.OutputRoot,
+                            active.Metadata.SessionId,
+                            active.Metadata.StartedAtUtc,
+                            cancellationToken).ConfigureAwait(false);
+                        reservation = embeddedReservation.Staging;
+                    }
+                    catch (Exception exception)
+                    {
+                        var warning = $"Embedded artifacts are unavailable; saving a normal session folder instead. {exception.Message}";
+                        warnings.Add(warning);
+                        reservation = artifacts.Reserve(request.OutputRoot, active.Metadata.SessionId, active.Metadata.StartedAtUtc);
+                    }
+                }
+                else
+                {
+                    reservation = artifacts.Reserve(request.OutputRoot, active.Metadata.SessionId, active.Metadata.StartedAtUtc);
+                }
             }
             catch (Exception exception)
             {
                 throw new SessionException(ErrorCodes.OutputFailed, $"The output destination was not accepted; recording is still active. {exception.Message}", exception);
             }
 
-            var warnings = new List<string>();
-            var artifactReference = ArtifactEvents.CreateReference(active.Metadata.SessionId, reservation);
+            await TryMarkRecoveryArtifactsAsync(
+                active.Metadata.SessionId,
+                new RecoveryArtifactState(
+                    request.ArtifactTransport,
+                    embeddedReservation is null ? ArtifactTransport.Folder : null,
+                    embeddedReservation?.Staging.DirectoryPath,
+                    embeddedReservation?.FinalEtlPath,
+                    embeddedReservation is null
+                        ? null
+                        : EtwSnap.Artifacts.EmbeddedArtifactConstants.GetStreamName(active.Metadata.SessionId))).ConfigureAwait(false);
+
+            var artifactReference = ArtifactEvents.CreateReference(
+                active.Metadata.SessionId,
+                embeddedReservation?.FallbackDirectoryPath ?? reservation.DirectoryPath);
             TryEmitArtifactEvent(
                 () => artifactEvents.EmitReference(artifactReference),
                 "ArtifactReference",
@@ -169,6 +214,7 @@ internal sealed class CaptureSessionCoordinator(
 
             SetState(CaptureSessionState.StoppingCapture);
             string? tracePath = null;
+            string? embeddedFallbackReason = null;
             var stage = "stopping native capture";
 
             try
@@ -193,6 +239,7 @@ internal sealed class CaptureSessionCoordinator(
                     catch (Exception exception)
                     {
                         warnings.Add($"Trace stop failed: {exception.Message}");
+                        embeddedFallbackReason = $"Trace stop failed: {exception.Message}";
                         try
                         {
                             await wpr.CancelAsync(active.Metadata.Wpr, CancellationToken.None).ConfigureAwait(false);
@@ -217,6 +264,42 @@ internal sealed class CaptureSessionCoordinator(
                     cancellationToken,
                     (percent, message) => TryReportProgressAsync(progress, WireMessage.CreateProgress(sourceRequest, percent, message))).ConfigureAwait(false);
 
+                ArtifactPublication publication;
+                if (embeddedReservation is not null)
+                {
+                    stage = "publishing embedded artifacts";
+                    publication = await embeddedArtifacts.PublishAsync(
+                        embeddedReservation,
+                        active.Metadata,
+                        embeddedFallbackReason,
+                        cancellationToken).ConfigureAwait(false);
+                    if (publication.Warning is not null)
+                    {
+                        warnings.Add(publication.Warning);
+                    }
+                }
+                else
+                {
+                    publication = new ArtifactPublication(
+                        ArtifactTransport.Folder,
+                        result.OutputDirectory,
+                        result.ManifestPath,
+                        tracePath,
+                        result.OutputDirectory,
+                        warnings.FirstOrDefault(message => message.StartsWith("Embedded artifacts are unavailable", StringComparison.Ordinal)));
+                }
+
+                await TryMarkRecoveryArtifactsAsync(
+                    active.Metadata.SessionId,
+                    new RecoveryArtifactState(
+                        request.ArtifactTransport,
+                        publication.Transport,
+                        embeddedReservation?.Staging.DirectoryPath,
+                        publication.Transport == ArtifactTransport.Embedded ? publication.TracePath : null,
+                        publication.Transport == ArtifactTransport.Embedded
+                            ? EtwSnap.Artifacts.EmbeddedArtifactConstants.GetStreamName(active.Metadata.SessionId)
+                            : null)).ConfigureAwait(false);
+
                 TryEmitArtifactEvent(
                     () => artifactEvents.EmitCommitted(ArtifactEvents.CreateCommitted(artifactReference, result, stats)),
                     "ArtifactCommitted");
@@ -225,17 +308,21 @@ internal sealed class CaptureSessionCoordinator(
                 await TryMarkRecoveryAsync(
                     active.Metadata.SessionId,
                     result.FailedFrames == 0 && warnings.Count == 0 ? "Complete" : "Partial",
-                    result.OutputDirectory,
+                    publication.ArtifactPath,
                     result.Errors.Count == 0 ? null : string.Join(Environment.NewLine, result.Errors)).ConfigureAwait(false);
                 SetIdle(null);
 
                 return new StopCaptureResult(
                     active.Metadata.SessionId,
-                    result.OutputDirectory,
-                    result.ManifestPath,
-                    tracePath,
+                    publication.OutputDirectory,
+                    publication.ManifestPath,
+                    publication.TracePath,
                     result.ExportedFrames,
-                    checked((long)stats.EvictedFrames));
+                    checked((long)stats.EvictedFrames),
+                    request.ArtifactTransport,
+                    publication.Transport,
+                    publication.ArtifactPath,
+                    publication.Warning);
             }
             catch (Exception exception)
             {
@@ -386,6 +473,17 @@ internal sealed class CaptureSessionCoordinator(
         try
         {
             await recovery.MarkAsync(sessionId, status, outputDirectory, error, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task TryMarkRecoveryArtifactsAsync(Guid sessionId, RecoveryArtifactState artifactsState)
+    {
+        try
+        {
+            await recovery.MarkArtifactsAsync(sessionId, artifactsState, CancellationToken.None).ConfigureAwait(false);
         }
         catch
         {

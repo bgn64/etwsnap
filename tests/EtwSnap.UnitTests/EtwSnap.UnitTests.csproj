@@ -11,6 +11,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <ProjectReference Include="..\..\src\EtwSnap.Artifacts\EtwSnap.Artifacts.csproj" />
     <ProjectReference Include="..\..\src\EtwSnap.Contracts\EtwSnap.Contracts.csproj" />
     <ProjectReference Include="..\..\src\EtwSnap.Host\EtwSnap.Host.csproj" />
   </ItemGroup>
