@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Common.ps1')
 
 $root = Get-RepositoryRoot
-$trace = [IO.Path]::GetFullPath($TracePath)
+$trace = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($TracePath)
 if (-not (Test-Path $trace -PathType Leaf)) {
     throw "The ETL does not exist: $trace"
 }

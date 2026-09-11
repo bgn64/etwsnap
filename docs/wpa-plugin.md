@@ -38,7 +38,7 @@ The plugin never recursively scans directories or guesses from frame filenames. 
 
 A manifest must have a supported schema, matching full session ID and provider GUID, unique frame numbers, contained relative image paths, matching ETW frame metadata, and a matching committed SHA-256 when available. Artifact failures do not hide ETW rows.
 
-Embedded PNGs are not extracted while WPA loads a trace. Their Image Path is an embedded locator until `Open in Default Viewer` or `Reveal in File Explorer` is invoked. The selected verified PNG is then materialized atomically under `%LOCALAPPDATA%\EtwSnap\WpaCache\<etl-hash>\<session-id>`. Cached files are revalidated before reuse; cleanup is bounded to 2 GiB and 30 days. Deleting the cache is always safe.
+Embedded PNGs are materialized while WPA loads the trace. Each Image Path is a normal file under `%LOCALAPPDATA%\EtwSnap\WpaCache\<etl-hash>\<session-id>`, so default image viewers can navigate between adjacent frames. Files are written atomically and verified by length and SHA-256; valid cached files are reused. Cleanup is bounded to 2 GiB and 30 days, and deleting the cache is always safe.
 
 Portable single-session layout:
 

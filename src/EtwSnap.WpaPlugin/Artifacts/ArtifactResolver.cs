@@ -218,20 +218,22 @@ public sealed class ArtifactResolver
                     manifest.Statistics.NativeErrors,
                     checked((ulong)manifest.Statistics.ExportedFrames),
                     checked((ulong)manifest.Statistics.FailedFrames));
+                var framePaths = embeddedFrames.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value.Materialize());
                 var diagnosticCandidate = new ValidatedCandidate(
                     $"{etlPath}:{streamName}!/{EtwSnap.Artifacts.EmbeddedArtifactConstants.ManifestFileName}",
                     descriptor.ManifestSha256,
-                    new Dictionary<ulong, string>(),
+                    framePaths,
                     manifestFrameNumbers,
                     statistics);
                 return new ArtifactResolution(
                     ArtifactResolutionState.Resolved,
                     diagnosticCandidate.ManifestPath,
-                    diagnosticCandidate.FramePaths,
+                    framePaths,
                     manifestFrameNumbers,
                     statistics,
-                    BuildDiagnostics(diagnosticCandidate, events.OfType<RecordingStoppedEvent>().LastOrDefault()),
-                    embeddedFrames);
+                    BuildDiagnostics(diagnosticCandidate, events.OfType<RecordingStoppedEvent>().LastOrDefault()));
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or JsonException or ArgumentException or InvalidOperationException or OverflowException)
             {

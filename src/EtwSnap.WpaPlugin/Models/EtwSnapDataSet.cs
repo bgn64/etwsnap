@@ -23,8 +23,7 @@ public sealed record ScreenshotRecord(
     uint Height,
     uint PixelFormat,
     long PresentationTime100ns,
-    long CallbackQpc,
-    Func<string>? MaterializeImage = null);
+    long CallbackQpc);
 
 public sealed record SessionRecord(
     Timestamp StartTime,
@@ -71,10 +70,7 @@ public sealed record EtwSnapDataSet(
                 var frame = frames[index];
                 var stop = index + 1 < frames.Length ? frames[index + 1].Timestamp : sessionStop;
                 var durationNanoseconds = Math.Max(0, stop.ToNanoseconds - frame.Timestamp.ToNanoseconds);
-                var hasFileFrame = resolution.FramePaths.TryGetValue(frame.FrameNumber, out var imagePath);
-                EmbeddedFrameReference? embeddedFrame = null;
-                var hasEmbeddedFrame = resolution.EmbeddedFrames?.TryGetValue(frame.FrameNumber, out embeddedFrame) == true;
-                var hasManifestFrame = hasFileFrame || hasEmbeddedFrame;
+                var hasManifestFrame = resolution.FramePaths.TryGetValue(frame.FrameNumber, out var imagePath);
                 screenshots.Add(new ScreenshotRecord(
                     frame.Timestamp,
                     TimestampDelta.FromNanoseconds(durationNanoseconds),
@@ -87,13 +83,12 @@ public sealed record EtwSnapDataSet(
                                 ? ScreenshotAvailability.MissingFile
                                 : ScreenshotAvailability.NotPersisted
                             : ScreenshotAvailability.ArtifactUnavailable,
-                    hasFileFrame ? imagePath : hasEmbeddedFrame ? embeddedFrame!.DisplayPath : null,
+                    hasManifestFrame ? imagePath : null,
                     frame.Width,
                     frame.Height,
                     frame.PixelFormat,
                     frame.PresentationTime100ns,
-                    frame.CallbackQpc,
-                    hasEmbeddedFrame ? embeddedFrame!.Materialize : null));
+                    frame.CallbackQpc));
             }
 
             sessions.Add(new SessionRecord(

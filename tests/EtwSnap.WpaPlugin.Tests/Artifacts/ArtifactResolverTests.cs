@@ -181,7 +181,7 @@ public sealed class ArtifactResolverTests
     }
 
     [Fact]
-    public async Task EmbeddedArtifactsWinAndMaterializeOnCommandUse()
+    public async Task EmbeddedArtifactsWinAndMaterializeDuringResolution()
     {
         using var fixture = new ArtifactFixture();
         await fixture.RequireNamedStreamsAsync();
@@ -189,31 +189,38 @@ public sealed class ArtifactResolverTests
         var adjacentImage = fixture.WriteManifest(fixture.Root, sessionId, "frames/frame_00000001.png", "folder");
         Directory.CreateDirectory(Path.GetDirectoryName(adjacentImage)!);
         File.WriteAllBytes(adjacentImage, [1, 2, 3]);
-        var embeddedImageBytes = new byte[] { 137, 80, 78, 71, 4, 5, 6 };
+        byte[][] embeddedImageBytes = [[137, 80, 78, 71, 4, 5, 6], [137, 80, 78, 71, 7, 8, 9]];
         await fixture.WriteEmbeddedBundleAsync(sessionId, embeddedImageBytes);
-        var frame = CreateFrame(sessionId, fixture.TracePath);
+        var frames = new[]
+        {
+            CreateFrame(sessionId, fixture.TracePath),
+            CreateFrame(sessionId, fixture.TracePath, 2, 200),
+        };
 
-        var resolution = new ArtifactResolver().Resolve(sessionId, [frame]);
-        var screenshot = Assert.Single(EtwSnapDataSet.Build([frame]).Screenshots);
+        var resolution = new ArtifactResolver().Resolve(sessionId, frames);
+        var screenshots = EtwSnapDataSet.Build(frames).Screenshots;
 
         Assert.Equal(ArtifactResolutionState.Resolved, resolution.State);
-        Assert.Empty(resolution.FramePaths);
-        Assert.Single(resolution.EmbeddedFrames!);
+        Assert.Equal(2, resolution.FramePaths.Count);
         Assert.Contains(EmbeddedArtifactConstants.StreamPrefix, resolution.ManifestPath);
-        Assert.Equal(ScreenshotAvailability.Saved, screenshot.Availability);
-        Assert.False(File.Exists(screenshot.ImagePath));
+        Assert.All(screenshots, screenshot => Assert.Equal(ScreenshotAvailability.Saved, screenshot.Availability));
+        Assert.All(screenshots, screenshot => Assert.True(File.Exists(screenshot.ImagePath)));
+        Assert.Single(screenshots.Select(screenshot => Path.GetDirectoryName(screenshot.ImagePath)).Distinct());
 
-        var materializedPath = screenshot.MaterializeImage!();
-        Assert.True(ScreenshotTableCommands.TryCreateViewStartInfo([screenshot], [0], out var startInfo));
+        Assert.True(ScreenshotTableCommands.TryCreateViewStartInfo(screenshots, [0], out var startInfo));
         try
         {
-            Assert.Equal(materializedPath, startInfo.FileName);
+            Assert.Equal(screenshots[0].ImagePath, startInfo.FileName);
             Assert.True(File.Exists(startInfo.FileName));
-            Assert.Equal(embeddedImageBytes, await File.ReadAllBytesAsync(startInfo.FileName));
+            Assert.Equal(embeddedImageBytes[0], await File.ReadAllBytesAsync(screenshots[0].ImagePath!));
+            Assert.Equal(embeddedImageBytes[1], await File.ReadAllBytesAsync(screenshots[1].ImagePath!));
         }
         finally
         {
-            File.Delete(startInfo.FileName);
+            foreach (var screenshot in screenshots)
+            {
+                File.Delete(screenshot.ImagePath!);
+            }
         }
     }
 
@@ -277,12 +284,16 @@ public sealed class ArtifactResolverTests
         }
     }
 
-    private static FrameCapturedEvent CreateFrame(Guid sessionId, string sourcePath) => new(
-        Timestamp.FromNanoseconds(100),
+    private static FrameCapturedEvent CreateFrame(
+        Guid sessionId,
+        string sourcePath,
+        ulong frameNumber = 1,
+        long timestampNanoseconds = 100) => new(
+        Timestamp.FromNanoseconds(timestampNanoseconds),
         sessionId,
-        1,
-        1234,
-        5678,
+        frameNumber,
+        1233 + checked((long)frameNumber),
+        5677 + checked((long)frameNumber),
         2,
         2,
         1)
@@ -331,12 +342,55 @@ public sealed class ArtifactResolverTests
             }
         }
 
-        public async Task WriteEmbeddedBundleAsync(Guid sessionId, byte[] imageBytes)
+        public async Task WriteEmbeddedBundleAsync(Guid sessionId, IReadOnlyList<byte[]> imageBytes)
         {
             var source = Path.Combine(Root, "embedded-source");
-            var imagePath = WriteManifest(source, sessionId, "frames/frame_00000001.png", "embedded");
-            Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
-            await File.WriteAllBytesAsync(imagePath, imageBytes);
+            Directory.CreateDirectory(Path.Combine(source, "frames"));
+            var frames = imageBytes.Select((bytes, index) => new
+            {
+                frameNumber = checked((ulong)index + 1),
+                presentationTime100ns = 1234L + index,
+                callbackQpc = 5678L + index,
+                width = 2,
+                height = 2,
+                pixelFormat = 1,
+                path = $"frames/frame_{index + 1:D8}.png",
+                bytes,
+            }).ToArray();
+            var manifest = new
+            {
+                schemaVersion = 1,
+                sessionId,
+                provider = new { name = "ETWSnap-Service", id = EtwSnapTraceParser.ProviderId },
+                statistics = new
+                {
+                    acceptedFrames = frames.Length,
+                    retainedFrames = frames.Length,
+                    evictedFrames = 0,
+                    droppedFrames = 0,
+                    nativeErrors = 0,
+                    exportedFrames = frames.Length,
+                    failedFrames = 0,
+                },
+                frames = frames.Select(frame => new
+                {
+                    frame.frameNumber,
+                    frame.presentationTime100ns,
+                    frame.callbackQpc,
+                    frame.width,
+                    frame.height,
+                    frame.pixelFormat,
+                    frame.path,
+                }),
+                marker = "embedded",
+            };
+            await File.WriteAllBytesAsync(
+                Path.Combine(source, "manifest.json"),
+                JsonSerializer.SerializeToUtf8Bytes(manifest));
+            foreach (var frame in frames)
+            {
+                await File.WriteAllBytesAsync(Path.Combine(source, frame.path), frame.bytes);
+            }
             var zipPath = Path.Combine(Root, $"{sessionId:N}.zip");
             await new EmbeddedBundle().CreateAsync(
                 source,

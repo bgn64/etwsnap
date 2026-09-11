@@ -25,8 +25,7 @@ public sealed record ArtifactResolution(
     IReadOnlyDictionary<ulong, string> FramePaths,
     IReadOnlySet<ulong> ManifestFrameNumbers,
     ArtifactStatistics? Statistics,
-    string? Detail,
-    IReadOnlyDictionary<ulong, EmbeddedFrameReference>? EmbeddedFrames = null)
+    string? Detail)
 {
     public static ArtifactResolution Unresolved(ArtifactResolutionState state, string? detail = null) =>
         new(state, null, new Dictionary<ulong, string>(), new HashSet<ulong>(), null, detail);
