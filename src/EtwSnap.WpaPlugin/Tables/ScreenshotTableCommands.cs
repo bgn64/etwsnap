@@ -87,15 +87,12 @@ internal static class ScreenshotTableCommands
             return false;
         }
 
-        try
+        if (!File.Exists(row.ImagePath))
         {
-            imagePath = row.MaterializeImage?.Invoke() ?? row.ImagePath;
-            return File.Exists(imagePath);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or ArgumentException)
-        {
-            imagePath = string.Empty;
             return false;
         }
+
+        imagePath = row.ImagePath;
+        return true;
     }
 }

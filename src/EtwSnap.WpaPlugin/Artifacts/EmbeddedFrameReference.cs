@@ -2,15 +2,13 @@ using System.Collections.Concurrent;
 
 namespace EtwSnap.WpaPlugin.Artifacts;
 
-public sealed record EmbeddedFrameReference(
+internal sealed record EmbeddedFrameReference(
     string EtlPath,
     string StreamName,
     Guid SessionId,
     string EntryPath,
     EtwSnap.Artifacts.EmbeddedBundleDescriptor Descriptor)
 {
-    public string DisplayPath => $"{EtlPath}:{StreamName}!/{EntryPath}";
-
     public string Materialize() => EmbeddedFrameMaterializer.Materialize(this);
 }
 

@@ -92,4 +92,4 @@ The ETL hash binds artifacts to the exact primary stream. The manifest hash rema
 
 ## WPA
 
-The ETWSnap WPA plugin checks the exact session stream before folder candidates. It validates metadata while loading but leaves PNGs embedded. Opening or revealing a screenshot materializes only that PNG into `%LOCALAPPDATA%\EtwSnap\WpaCache`, using a temporary file, length and hash verification, and atomic rename. Cache files are revalidated and may be deleted at any time.
+The ETWSnap WPA plugin checks the exact session stream before folder candidates. During trace loading it materializes all verified PNGs into `%LOCALAPPDATA%\EtwSnap\WpaCache`, using temporary files, length and hash verification, and atomic rename. Image Path values therefore point to normal files, and default image viewers can navigate between adjacent frames. Cache files are revalidated and may be deleted at any time.
