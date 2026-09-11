@@ -97,6 +97,7 @@ try {
             'test',
             'tests\EtwSnap.WpaPlugin.Tests\EtwSnap.WpaPlugin.Tests.csproj',
             '-c', $configuration,
+            '-p:Platform=x64',
             '--no-build',
             '--nologo',
             '--verbosity', 'minimal'

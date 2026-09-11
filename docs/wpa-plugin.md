@@ -13,6 +13,13 @@ Configurations:
 
 `All Frames` is the default so traces without accessible artifacts still show every ETW frame.
 
+Right-click exactly one saved row to use:
+
+- `Open in Default Viewer`, which opens the PNG through the user's default image handler.
+- `Reveal in File Explorer`, which opens Explorer with that PNG selected.
+
+Both commands revalidate that the PNG still exists when invoked. They safely do nothing for non-persisted frames, missing files, invalid rows, or multiple selected rows. SDK `1.2.2-preview` does not expose selection-aware command enablement, so the commands remain visible in the `All Frames` configuration; use `Saved Screenshots` to hide non-persisted rows entirely.
+
 `ETWSnap Sessions` exposes lifecycle settings, frame statistics, artifact resolution state, manifest path, and integrity diagnostics. Both tables assign public `StartTime` and `Duration` column roles so they can share selection and zoom with other tables in the same WPA Analysis tab.
 
 The first plugin version is table-only. It does not provide thumbnails, image preview, custom docking, or a preset WPA layout.

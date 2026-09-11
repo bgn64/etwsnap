@@ -42,6 +42,7 @@ public static class ScreenshotsTable
         savedScreenshots.InitialFilterShouldKeep = true;
         var allFrames = CreateConfiguration("All Frames");
 
+        ScreenshotTableCommands.Register(tableBuilder, rows);
         tableBuilder.AddTableConfiguration(savedScreenshots);
         tableBuilder.AddTableConfiguration(allFrames);
         tableBuilder.SetDefaultTableConfiguration(allFrames);
