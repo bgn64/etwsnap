@@ -129,27 +129,25 @@ public sealed class EmbeddedArtifactManager
         Directory.CreateDirectory(canonicalRoot);
         NamedStreamStore.RejectReparsePoint(canonicalRoot);
         var stem = Path.GetFileNameWithoutExtension(canonicalEtl);
-        var finalEtl = Path.Combine(canonicalRoot, stem + ".etl");
-        var zipPaths = selected.Select(item => Path.Combine(
-            canonicalRoot,
-            selected.Count == 1
-                ? EmbeddedArtifactConstants.GetArtifactFileName(stem)
-                : EmbeddedArtifactConstants.GetArtifactFileName($"{stem}.{item.SessionId!.Value:N}")))
+        var ordered = selected
+            .OrderBy(item => item.SessionId!.Value.ToString("N"), StringComparer.Ordinal)
             .ToArray();
-        if (File.Exists(finalEtl) || zipPaths.Any(File.Exists))
-        {
-            throw new EmbeddedArtifactException("One or more artifact export destinations already exist.");
-        }
+        var finalEtl = Path.Combine(canonicalRoot, stem + ".etl");
+        var zipPaths = ordered.Select((_, index) => Path.Combine(
+            canonicalRoot,
+            ordered.Length == 1
+                ? EmbeddedArtifactConstants.GetArtifactFileName(stem)
+                : EmbeddedArtifactConstants.GetIndexedArtifactFileName(stem, index + 1)))
+            .ToArray();
 
         var temporaryEtl = finalEtl + $".{Guid.NewGuid():N}.tmp";
         var temporaryZips = zipPaths.Select(path => path + $".{Guid.NewGuid():N}.tmp").ToArray();
-        var publishedPaths = new List<string>();
         try
         {
             await CopyPrimaryStreamAsync(canonicalEtl, temporaryEtl, cancellationToken).ConfigureAwait(false);
-            for (var index = 0; index < selected.Count; ++index)
+            for (var index = 0; index < ordered.Length; ++index)
             {
-                await using (var source = _streams.OpenRead(canonicalEtl, selected[index].Stream.Name))
+                await using (var source = _streams.OpenRead(canonicalEtl, ordered[index].Stream.Name))
                 await using (var destination = new FileStream(temporaryZips[index], FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
                     await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
@@ -160,35 +158,39 @@ public sealed class EmbeddedArtifactManager
                 await _bundles.InspectAsync(
                     verification,
                     temporaryEtl,
-                    selected[index].SessionId,
+                    ordered[index].SessionId,
                     cancellationToken).ConfigureAwait(false);
             }
 
-            File.Move(temporaryEtl, finalEtl, overwrite: false);
-            publishedPaths.Add(finalEtl);
-            for (var index = 0; index < zipPaths.Length; ++index)
+            using (var replacement = FileReplacementSet.Create(new[] { finalEtl }.Concat(zipPaths)))
             {
-                File.Move(temporaryZips[index], zipPaths[index], overwrite: false);
-                publishedPaths.Add(zipPaths[index]);
+                replacement.Publish(temporaryEtl, finalEtl);
+                for (var index = 0; index < zipPaths.Length; ++index)
+                {
+                    replacement.Publish(temporaryZips[index], zipPaths[index]);
+                }
+                if (!string.Equals(
+                    await EmbeddedBundle.HashFileAsync(finalEtl, cancellationToken).ConfigureAwait(false),
+                    await EmbeddedBundle.HashFileAsync(canonicalEtl, cancellationToken).ConfigureAwait(false),
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new EmbeddedArtifactException("The exported ETL failed final verification.");
+                }
+                for (var index = 0; index < zipPaths.Length; ++index)
+                {
+                    await using var verification = File.OpenRead(zipPaths[index]);
+                    await _bundles.InspectAsync(
+                        verification,
+                        finalEtl,
+                        ordered[index].SessionId,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                replacement.Commit();
             }
             return new EmbeddedArtifactExport(
                 finalEtl,
                 zipPaths,
-                selected.Select(item => item.SessionId!.Value).ToArray());
-        }
-        catch
-        {
-            foreach (var path in publishedPaths.AsEnumerable().Reverse())
-            {
-                try
-                {
-                    File.Delete(path);
-                }
-                catch
-                {
-                }
-            }
-            throw;
+                ordered.Select(item => item.SessionId!.Value).ToArray());
         }
         finally
         {

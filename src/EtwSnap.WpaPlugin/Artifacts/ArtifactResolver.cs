@@ -105,21 +105,55 @@ public sealed class ArtifactResolver
         var etlPath = sourcePaths[0];
         var directory = Path.GetDirectoryName(etlPath)!;
         var stem = Path.GetFileNameWithoutExtension(etlPath);
-        var candidates = new[]
+        var candidates = new List<string>();
+        var unsuffixed = Path.Combine(directory, EtwSnap.Artifacts.EmbeddedArtifactConstants.GetArtifactFileName(stem));
+        if (File.Exists(unsuffixed))
         {
-            Path.Combine(directory, EtwSnap.Artifacts.EmbeddedArtifactConstants.GetArtifactFileName(stem)),
-            Path.Combine(directory, EtwSnap.Artifacts.EmbeddedArtifactConstants.GetArtifactFileName($"{stem}.{sessionId:N}")),
-        }.Distinct(StringComparer.OrdinalIgnoreCase).Where(File.Exists).ToArray();
-        if (candidates.Length == 0)
+            candidates.Add(unsuffixed);
+        }
+        candidates.AddRange(Directory
+            .EnumerateFiles(
+                directory,
+                $"{stem}-*{EtwSnap.Artifacts.EmbeddedArtifactConstants.ArtifactFileExtension}",
+                SearchOption.TopDirectoryOnly)
+            .Select(path => new
+            {
+                Path = path,
+                Parsed = EtwSnap.Artifacts.EmbeddedArtifactConstants.TryParseIndexedArtifactFileName(
+                    stem,
+                    Path.GetFileName(path),
+                    out var index),
+                Index = index,
+            })
+            .Where(item => item.Parsed)
+            .OrderBy(item => item.Index)
+            .Select(item => item.Path));
+        if (candidates.Count == 0)
         {
             return null;
         }
 
         ArtifactResolution? firstInvalid = null;
+        var etlHash = EtwSnap.Artifacts.EmbeddedBundle.HashFileAsync(
+            etlPath,
+            CancellationToken.None).GetAwaiter().GetResult();
         foreach (var candidate in candidates)
         {
             try
             {
+                EtwSnap.Artifacts.EmbeddedBundleDescriptor descriptor;
+                using (var candidateStream = File.OpenRead(candidate))
+                {
+                    descriptor = new EtwSnap.Artifacts.EmbeddedBundle().ReadDescriptorAsync(
+                        candidateStream,
+                        CancellationToken.None).GetAwaiter().GetResult();
+                }
+                if (descriptor.SessionId != sessionId ||
+                    descriptor.PrimaryEtlSha256 is null ||
+                    !string.Equals(descriptor.PrimaryEtlSha256, etlHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
                 var archive = EtwSnap.Artifacts.ArtifactArchive.ValidateAsync(
                     candidate,
                     etlPath,
@@ -320,10 +354,13 @@ public sealed class ArtifactResolver
         {
             return direct;
         }
-        var suffix = Path.GetExtension(stem);
-        return suffix.Length == 33 && Guid.TryParseExact(suffix[1..], "N", out _)
-            ? stem[..^suffix.Length] + ".etl"
-            : direct;
+        var fileName = Path.GetFileName(stem);
+        var separator = fileName.LastIndexOf('-');
+        if (separator > 0 && int.TryParse(fileName[(separator + 1)..], out var index) && index >= 1)
+        {
+            return Path.Combine(Path.GetDirectoryName(stem)!, fileName[..separator] + ".etl");
+        }
+        return direct;
     }
 
     private static ArtifactResolution? ResolveEmbedded(

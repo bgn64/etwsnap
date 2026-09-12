@@ -7,21 +7,21 @@ Every screen-capture session produces one canonical `.etwsnap.zip` payload. The 
 Screenshot-only capture:
 
 ```text
-etwsnap-<start-UTC>-<id8>.etwsnap.zip
+<name>.etwsnap.zip
 ```
 
 Traced capture:
 
 ```text
-etwsnap-<start-UTC>-<id8>.etl
-etwsnap-<start-UTC>-<id8>.etwsnap.zip
+<name>.etl
+<name>.etwsnap.zip
 ```
 
 Embedded traced capture:
 
 ```powershell
 etwsnap start --trace
-etwsnap stop D:\Captures --embed-artifacts
+etwsnap stop D:\Captures\capture --embed-artifacts
 ```
 
 Successful embedded output leaves only the `.etl`. Its stream is named `EtwSnap.Session.<full-session-id-without-hyphens>` and contains the same ZIP bytes that sidecar mode would publish. If stream preflight, attachment, verification, or publication fails, ETWSnap publishes the ETL and `.etwsnap.zip` sidecar pair and prints a warning.
@@ -63,7 +63,7 @@ etwsnap artifacts remove <trace.etl> --output-root <directory>
 etwsnap artifacts remove <trace.etl> --session <id> --output-root <directory>
 ```
 
-The output is a primary-stream-only ETL plus canonical sidecar ZIPs. One selected session produces `<etl-stem>.etwsnap.zip`; multiple sessions produce `<etl-stem>.<full-session-id>.etwsnap.zip`. ETWSnap verifies every output before deleting any selected stream.
+The output is a primary-stream-only ETL plus canonical sidecar ZIPs. One selected session produces `<etl-stem>.etwsnap.zip`; multiple sessions are sorted lexicographically by full session GUID and produce `<etl-stem>-1.etwsnap.zip`, `<etl-stem>-2.etwsnap.zip`, and so on. Exact colliding ETL and ZIP outputs are replaced. ETWSnap verifies every output before deleting any selected stream.
 
 Discard without export:
 

@@ -127,15 +127,24 @@ internal sealed class CliApplication
 
     private Command CreateStopCommand()
     {
-        var outputRoot = new Argument<string>("output-root") { Description = "Directory under which the session artifact will be created." };
+            var outputName = new Argument<string>("output-name") { Description = "Extensionless output path used for the ETL and artifact ZIP." };
         var embedArtifacts = new Option<bool>("--embed-artifacts") { Description = "Attach session artifacts to the generated ETL when supported." };
         var command = new Command("stop", "Stop recording and save screenshots and any trace.");
-        command.Arguments.Add(outputRoot);
+            command.Arguments.Add(outputName);
         command.Options.Add(embedArtifacts);
         command.SetAction(async (parseResult, cancellationToken) =>
         {
+                string canonicalOutputName;
+                try
+                {
+                    canonicalOutputName = EmbeddedArtifactConstants.GetOutputPaths(parseResult.GetValue(outputName)!).BasePath;
+                }
+                catch (ArgumentException exception)
+                {
+                    return WriteUsageError(exception.Message);
+                }
             var request = new StopCaptureRequest(
-                parseResult.GetValue(outputRoot)!,
+                    canonicalOutputName,
                 parseResult.GetValue(embedArtifacts) ? ArtifactTransport.Embedded : ArtifactTransport.Sidecar);
             return await SendAsync<StopCaptureRequest, StopCaptureResult>(
                 CommandKind.Stop,
@@ -431,10 +440,13 @@ internal sealed class CliApplication
         {
             return direct;
         }
-        var suffix = Path.GetExtension(stem);
-        return suffix.Length == 33 && Guid.TryParseExact(suffix[1..], "N", out _)
-            ? stem[..^suffix.Length] + ".etl"
-            : direct;
+        var fileName = Path.GetFileName(stem);
+        var separator = fileName.LastIndexOf('-');
+        if (separator > 0 && int.TryParse(fileName[(separator + 1)..], out var index) && index >= 1)
+        {
+            return Path.Combine(Path.GetDirectoryName(stem)!, fileName[..separator] + ".etl");
+        }
+        return direct;
     }
 
     private static void WriteRemovalWarning(string tracePath, IReadOnlyList<EmbeddedStreamInspection> selected)

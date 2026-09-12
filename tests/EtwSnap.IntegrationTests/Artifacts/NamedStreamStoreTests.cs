@@ -154,6 +154,39 @@ public sealed class NamedStreamStoreTests
     }
 
     [Fact]
+    public async Task MultiSessionExportUsesGuidSortedOneBasedNamesAndOverwritesTargets()
+    {
+        using var fixture = await NamedStreamFixture.CreateAsync();
+        var providerId = Guid.NewGuid();
+        var lowerSession = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var higherSession = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        var manager = new EmbeddedArtifactManager();
+        var higherArchive = await CreateArchiveAsync(fixture, providerId, higherSession, "higher");
+        var lowerArchive = await CreateArchiveAsync(fixture, providerId, lowerSession, "lower");
+        await manager.AddAsync(fixture.EtlPath, higherArchive, default);
+        await manager.AddAsync(fixture.EtlPath, lowerArchive, default);
+        var inspections = await manager.InspectAsync(fixture.EtlPath, default);
+        var selectedInReverseOrder = inspections.OrderByDescending(item => item.SessionId).ToArray();
+        var output = Path.Combine(fixture.Root, "multi-export");
+        Directory.CreateDirectory(output);
+        await File.WriteAllBytesAsync(Path.Combine(output, "trace.etl"), "old-etl"u8.ToArray());
+        await File.WriteAllBytesAsync(Path.Combine(output, "trace-1.etwsnap.zip"), "old-1"u8.ToArray());
+        await File.WriteAllBytesAsync(Path.Combine(output, "trace-2.etwsnap.zip"), "old-2"u8.ToArray());
+
+        var export = await manager.ExportAsync(fixture.EtlPath, selectedInReverseOrder, output, default);
+
+        Assert.Equal([lowerSession, higherSession], export.SessionIds);
+        Assert.Equal(
+            ["trace-1.etwsnap.zip", "trace-2.etwsnap.zip"],
+            export.ArtifactZipPaths.Select(Path.GetFileName));
+        Assert.Equal(fixture.PrimaryBytes, await File.ReadAllBytesAsync(export.EtlPath));
+        var first = await ArtifactArchive.ValidateAsync(export.ArtifactZipPaths[0], export.EtlPath, providerId, 2, default);
+        var second = await ArtifactArchive.ValidateAsync(export.ArtifactZipPaths[1], export.EtlPath, providerId, 2, default);
+        Assert.Equal(lowerSession, first.Manifest.SessionId);
+        Assert.Equal(higherSession, second.Manifest.SessionId);
+    }
+
+    [Fact]
     public async Task MalformedEtwSnapStreamIsReportedAsInvalid()
     {
         using var fixture = await NamedStreamFixture.CreateAsync();
@@ -209,6 +242,72 @@ public sealed class NamedStreamStoreTests
                 }
             });
         }
+    }
+
+    private static async Task<ValidatedArtifactArchive> CreateArchiveAsync(
+        NamedStreamFixture fixture,
+        Guid providerId,
+        Guid sessionId,
+        string directoryName)
+    {
+        var directory = Path.Combine(fixture.Root, directoryName);
+        Directory.CreateDirectory(Path.Combine(directory, "frames"));
+        await File.WriteAllBytesAsync(Path.Combine(directory, "frames", "frame_00000001.png"), [137, 80, 78, 71]);
+        await File.WriteAllBytesAsync(
+            Path.Combine(directory, "manifest.json"),
+            JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                schemaVersion = 2,
+                sessionId,
+                status = "Complete",
+                startedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1),
+                stoppedAtUtc = DateTimeOffset.UtcNow,
+                qpcFrequency = 10_000_000,
+                capture = new
+                {
+                    trace = true,
+                    target = new { kind = 0, handle = 0 },
+                    framesPerSecond = 30,
+                    bufferMegabytes = 500,
+                    captureCursor = true,
+                },
+                provider = new { name = "ETWSnap-Service", id = providerId },
+                trace = new
+                {
+                    instanceName = "test",
+                    supplementalProfilePath = "EtwSnap.wprp",
+                    supplementalProfileHash = "hash",
+                    userProfilePath = (string?)null,
+                    userProfileSelector = (string?)null,
+                    userProfileHash = (string?)null,
+                },
+                statistics = new
+                {
+                    acceptedFrames = 1,
+                    retainedFrames = 1,
+                    evictedFrames = 0,
+                    droppedFrames = 0,
+                    nativeErrors = 0,
+                    exportedFrames = 1,
+                    failedFrames = 0,
+                },
+                frames = new[]
+                {
+                    new
+                    {
+                        frameNumber = 1,
+                        presentationTime100ns = 10,
+                        callbackQpc = 20,
+                        width = 1,
+                        height = 1,
+                        pixelFormat = 1,
+                        path = "frames/frame_00000001.png",
+                    },
+                },
+            }));
+        var zipPath = Path.Combine(fixture.Root, directoryName + ".etwsnap.zip");
+        await new EmbeddedBundle().CreateAsync(directory, fixture.EtlPath, sessionId, providerId, 2, zipPath, default);
+        return await ArtifactArchive.ValidateAsync(zipPath, fixture.EtlPath, providerId, 2, default);
     }
 
     private sealed class NamedStreamFixture : IDisposable

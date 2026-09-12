@@ -17,6 +17,49 @@ public static class EmbeddedArtifactConstants
 
     public static string GetArtifactFileName(string baseName) => baseName + ArtifactFileExtension;
 
+    public static ArtifactOutputPaths GetOutputPaths(string outputName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputName);
+        var basePath = Path.GetFullPath(outputName);
+        var name = Path.GetFileName(basePath);
+        if (Directory.Exists(basePath) || string.IsNullOrWhiteSpace(name) ||
+            name.EndsWith(".etl", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Provide an explicit output name without an .etl or .zip extension.", nameof(outputName));
+        }
+        var directory = Path.GetDirectoryName(basePath)
+            ?? throw new ArgumentException("The output name must have a parent directory.", nameof(outputName));
+        return new ArtifactOutputPaths(
+            basePath,
+            directory,
+            name,
+            basePath + ".etl",
+            basePath + ArtifactFileExtension);
+    }
+
+    public static string GetIndexedArtifactFileName(string baseName, int index)
+    {
+        if (index < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+        return $"{baseName}-{index}{ArtifactFileExtension}";
+    }
+
+    public static bool TryParseIndexedArtifactFileName(string baseName, string fileName, out int index)
+    {
+        index = 0;
+        var prefix = baseName + "-";
+        if (!fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+            !fileName.EndsWith(ArtifactFileExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        var value = fileName[prefix.Length..^ArtifactFileExtension.Length];
+        return int.TryParse(value, out index) && index >= 1 && value == index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     public static bool TryParseStreamName(string streamName, out Guid sessionId)
     {
         sessionId = default;
@@ -24,3 +67,10 @@ public static class EmbeddedArtifactConstants
             Guid.TryParseExact(streamName[StreamPrefix.Length..], "N", out sessionId);
     }
 }
+
+public sealed record ArtifactOutputPaths(
+    string BasePath,
+    string DirectoryPath,
+    string Name,
+    string EtlPath,
+    string ZipPath);

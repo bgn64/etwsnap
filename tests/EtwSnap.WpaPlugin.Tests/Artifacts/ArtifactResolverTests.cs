@@ -52,20 +52,39 @@ public sealed class ArtifactResolverTests
     }
 
     [Fact]
-    public async Task ResolvesSessionQualifiedSidecarZip()
+    public async Task ResolvesIndexedSidecarZip()
     {
         using var fixture = new ArtifactFixture();
         var sessionId = Guid.NewGuid();
-        await fixture.WriteSidecarBundleAsync(sessionId, [[137, 80, 78, 71]], qualifyWithSessionId: true);
+        await fixture.WriteSidecarBundleAsync(sessionId, [[137, 80, 78, 71]], index: 1);
 
         var resolution = new ArtifactResolver().Resolve(sessionId, [CreateFrame(sessionId, fixture.TracePath)]);
 
         Assert.Equal(ArtifactResolutionState.Resolved, resolution.State);
-        Assert.Contains(sessionId.ToString("N"), resolution.ManifestPath);
+        Assert.Contains("trace-1.etwsnap.zip", resolution.ManifestPath);
         foreach (var path in resolution.FramePaths.Values)
         {
             File.Delete(path);
         }
+    }
+
+    [Fact]
+    public async Task IgnoresIndexedZipThatBelongsToAnotherEtl()
+    {
+        using var fixture = new ArtifactFixture();
+        var sessionId = Guid.NewGuid();
+        var otherEtl = Path.Combine(fixture.Root, "other.etl");
+        await File.WriteAllBytesAsync(otherEtl, "other-etl"u8.ToArray());
+        var stem = Path.GetFileNameWithoutExtension(fixture.TracePath);
+        await fixture.WriteBundleAsync(
+            sessionId,
+            [[137, 80, 78, 71]],
+            Path.Combine(fixture.Root, EmbeddedArtifactConstants.GetIndexedArtifactFileName(stem, 1)),
+            etlPath: otherEtl);
+
+        var resolution = new ArtifactResolver().Resolve(sessionId, [CreateFrame(sessionId, fixture.TracePath)]);
+
+        Assert.Equal(ArtifactResolutionState.NotFound, resolution.State);
     }
 
     [Fact]
@@ -275,15 +294,17 @@ public sealed class ArtifactResolverTests
         public Task<string> WriteSidecarBundleAsync(
             Guid sessionId,
             IReadOnlyList<byte[]> imageBytes,
-            bool qualifyWithSessionId = false,
+            int? index = null,
             string? framePathOverride = null)
         {
             var stem = Path.GetFileNameWithoutExtension(TracePath);
-            var name = qualifyWithSessionId ? $"{stem}.{sessionId:N}" : stem;
+            var fileName = index is null
+                ? EmbeddedArtifactConstants.GetArtifactFileName(stem)
+                : EmbeddedArtifactConstants.GetIndexedArtifactFileName(stem, index.Value);
             return WriteBundleAsync(
                 sessionId,
                 imageBytes,
-                Path.Combine(Root, EmbeddedArtifactConstants.GetArtifactFileName(name)),
+                Path.Combine(Root, fileName),
                 framePathOverride);
         }
 
@@ -294,12 +315,13 @@ public sealed class ArtifactResolverTests
                 Path.Combine(Root, EmbeddedArtifactConstants.GetArtifactFileName("screenshots")),
                 bindToEtl: false);
 
-        private async Task<string> WriteBundleAsync(
+        internal async Task<string> WriteBundleAsync(
             Guid sessionId,
             IReadOnlyList<byte[]> imageBytes,
             string zipPath,
             string? framePathOverride = null,
-            bool bindToEtl = true)
+            bool bindToEtl = true,
+            string? etlPath = null)
         {
             var source = Path.Combine(Root, "embedded-source");
             Directory.CreateDirectory(Path.Combine(source, "frames"));
@@ -374,7 +396,7 @@ public sealed class ArtifactResolverTests
             }
             await new EmbeddedBundle().CreateAsync(
                 source,
-                bindToEtl ? TracePath : null,
+                bindToEtl ? etlPath ?? TracePath : null,
                 sessionId,
                 EtwSnapTraceParser.ProviderId,
                 2,

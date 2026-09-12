@@ -28,24 +28,24 @@ public enum ArtifactTransport
 public sealed record StopCaptureRequest
 {
     [JsonConstructor]
-    public StopCaptureRequest(string outputRoot, ArtifactTransport artifactTransport)
+    public StopCaptureRequest(string outputName, ArtifactTransport artifactTransport)
     {
-        OutputRoot = outputRoot;
+        OutputName = outputName;
         ArtifactTransport = artifactTransport;
     }
 
-    public StopCaptureRequest(string outputRoot) : this(outputRoot, ArtifactTransport.Sidecar)
+    public StopCaptureRequest(string outputName) : this(outputName, ArtifactTransport.Sidecar)
     {
     }
 
-    public string OutputRoot { get; init; }
+    public string OutputName { get; init; }
     public ArtifactTransport ArtifactTransport { get; init; }
 
-    public void Deconstruct(out string outputRoot) => outputRoot = OutputRoot;
+    public void Deconstruct(out string outputName) => outputName = OutputName;
 
-    public void Deconstruct(out string outputRoot, out ArtifactTransport artifactTransport)
+    public void Deconstruct(out string outputName, out ArtifactTransport artifactTransport)
     {
-        outputRoot = OutputRoot;
+        outputName = OutputName;
         artifactTransport = ArtifactTransport;
     }
 }

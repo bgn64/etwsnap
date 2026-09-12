@@ -16,7 +16,7 @@ public sealed class EmbeddedArtifactPublisherTests
         using var fixture = await PublisherFixture.CreateAsync();
         var publisher = new EmbeddedArtifactPublisher();
         var reservation = await publisher.ReserveAsync(
-            fixture.OutputRoot,
+            Path.Combine(fixture.OutputRoot, "capture"),
             fixture.SessionId,
             fixture.StartedAtUtc,
             ArtifactTransport.Embedded,
@@ -50,7 +50,7 @@ public sealed class EmbeddedArtifactPublisherTests
         using var fixture = await PublisherFixture.CreateAsync();
         var publisher = new EmbeddedArtifactPublisher();
         var reservation = await publisher.ReserveAsync(
-            fixture.OutputRoot,
+            Path.Combine(fixture.OutputRoot, "capture"),
             fixture.SessionId,
             fixture.StartedAtUtc,
             ArtifactTransport.Embedded,
@@ -99,7 +99,7 @@ public sealed class EmbeddedArtifactPublisherTests
         using var fixture = await PublisherFixture.CreateAsync();
         var publisher = new EmbeddedArtifactPublisher();
         var reservation = await publisher.ReserveAsync(
-            fixture.OutputRoot,
+            Path.Combine(fixture.OutputRoot, "capture"),
             fixture.SessionId,
             fixture.StartedAtUtc,
             ArtifactTransport.Embedded,
@@ -134,7 +134,7 @@ public sealed class EmbeddedArtifactPublisherTests
         using var fixture = await PublisherFixture.CreateAsync();
         var publisher = new EmbeddedArtifactPublisher();
         var reservation = await publisher.ReserveAsync(
-            fixture.OutputRoot,
+            Path.Combine(fixture.OutputRoot, "capture"),
             fixture.SessionId,
             fixture.StartedAtUtc,
             ArtifactTransport.Sidecar,
@@ -156,6 +156,39 @@ public sealed class EmbeddedArtifactPublisherTests
             EtwSnapConstants.ManifestSchemaVersion,
             default);
         Assert.Null(archive.Bundle.Descriptor.PrimaryEtlSha256);
+    }
+
+    [Fact]
+    public async Task SidecarPublicationOverwritesExactTargets()
+    {
+        using var fixture = await PublisherFixture.CreateAsync();
+        var publisher = new EmbeddedArtifactPublisher();
+        var reservation = await publisher.ReserveAsync(
+            Path.Combine(fixture.OutputRoot, "capture"),
+            fixture.SessionId,
+            fixture.StartedAtUtc,
+            ArtifactTransport.Sidecar,
+            true,
+            default);
+        await File.WriteAllBytesAsync(reservation.FinalEtlPath!, "old-etl"u8.ToArray());
+        await File.WriteAllBytesAsync(reservation.FinalZipPath, "old-zip"u8.ToArray());
+        await fixture.PopulateAsync(reservation.Staging);
+
+        var publication = await publisher.PublishAsync(
+            reservation,
+            fixture.Session,
+            ArtifactTransport.Sidecar,
+            null,
+            default);
+
+        Assert.Equal(fixture.PrimaryBytes, await File.ReadAllBytesAsync(publication.TracePath!));
+        var archive = await ArtifactArchive.ValidateAsync(
+            publication.ArtifactZipPath!,
+            publication.TracePath,
+            EtwSnapConstants.ProviderId,
+            EtwSnapConstants.ManifestSchemaVersion,
+            default);
+        Assert.Equal(fixture.SessionId, archive.Manifest.SessionId);
     }
 
     private sealed class PublisherFixture : IDisposable

@@ -247,6 +247,36 @@ public sealed class EmbeddedBundle
         return new EmbeddedBundleInspection(descriptor, manifestBytes, bundleStream.Length, expandedBytes);
     }
 
+    public async Task<EmbeddedBundleDescriptor> ReadDescriptorAsync(
+        Stream bundleStream,
+        CancellationToken cancellationToken)
+    {
+        if (!bundleStream.CanRead || !bundleStream.CanSeek)
+        {
+            throw new EmbeddedArtifactException("The artifact ZIP stream must be readable and seekable.");
+        }
+        bundleStream.Position = 0;
+        using var archive = new ZipArchive(bundleStream, ZipArchiveMode.Read, leaveOpen: true);
+        var entries = archive.Entries.Where(entry =>
+            string.Equals(entry.FullName, EmbeddedArtifactConstants.DescriptorFileName, StringComparison.Ordinal)).ToArray();
+        if (entries.Length != 1 || entries[0].Length > EmbeddedArtifactConstants.MaximumDescriptorBytes)
+        {
+            throw new EmbeddedArtifactException("The artifact ZIP descriptor is missing, duplicated, or oversized.");
+        }
+        await using var descriptorStream = entries[0].Open();
+        var descriptor = await JsonSerializer.DeserializeAsync<EmbeddedBundleDescriptor>(
+            descriptorStream,
+            EmbeddedBundleJson.Options,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new EmbeddedArtifactException("The artifact ZIP descriptor is invalid.");
+        if (descriptor.SchemaVersion != EmbeddedArtifactConstants.BundleSchemaVersion ||
+            descriptor.SessionId == Guid.Empty || descriptor.ProviderId == Guid.Empty)
+        {
+            throw new EmbeddedArtifactException("The artifact ZIP descriptor identity or schema is invalid.");
+        }
+        return descriptor;
+    }
+
     public async Task ExtractEntryAsync(
         Stream bundleStream,
         EmbeddedBundleDescriptor descriptor,

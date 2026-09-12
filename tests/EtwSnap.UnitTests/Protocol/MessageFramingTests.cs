@@ -9,7 +9,7 @@ public sealed class MessageFramingTests
     [Fact]
     public async Task RoundTripPreservesEnvelopeAndPayload()
     {
-        var request = WireMessage.CreateRequest(CommandKind.Stop, new StopCaptureRequest(@"D:\Captures"));
+        var request = WireMessage.CreateRequest(CommandKind.Stop, new StopCaptureRequest(@"D:\Captures\capture"));
         await using var stream = new MemoryStream();
 
         await MessageFraming.WriteAsync(stream, request);
@@ -19,13 +19,13 @@ public sealed class MessageFramingTests
         Assert.Equal(request.ProtocolVersion, result.ProtocolVersion);
         Assert.Equal(request.RequestId, result.RequestId);
         Assert.Equal(CommandKind.Stop, result.Command);
-        Assert.Equal(@"D:\Captures", result.ReadPayload<StopCaptureRequest>().OutputRoot);
+        Assert.Equal(@"D:\Captures\capture", result.ReadPayload<StopCaptureRequest>().OutputName);
     }
 
     [Fact]
     public async Task ProgressMessageRoundTrips()
     {
-        var request = WireMessage.CreateRequest(CommandKind.Stop, new StopCaptureRequest(@"D:\Captures"));
+        var request = WireMessage.CreateRequest(CommandKind.Stop, new StopCaptureRequest(@"D:\Captures\capture"));
         var progress = WireMessage.CreateProgress(request, 50, "Saving screenshots");
         await using var stream = new MemoryStream();
 
@@ -43,7 +43,7 @@ public sealed class MessageFramingTests
     {
         var request = WireMessage.CreateRequest(
             CommandKind.Stop,
-            new StopCaptureRequest(@"D:\Captures", ArtifactTransport.Embedded));
+            new StopCaptureRequest(@"D:\Captures\capture", ArtifactTransport.Embedded));
         await using var stream = new MemoryStream();
 
         await MessageFraming.WriteAsync(stream, request);

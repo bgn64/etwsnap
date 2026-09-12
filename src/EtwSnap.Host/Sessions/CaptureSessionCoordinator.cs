@@ -169,7 +169,7 @@ internal sealed class CaptureSessionCoordinator(
                 try
                 {
                     publicationReservation = await embeddedArtifacts.ReserveAsync(
-                        request.OutputRoot,
+                        request.OutputName,
                         active.Metadata.SessionId,
                         active.Metadata.StartedAtUtc,
                         request.ArtifactTransport,
@@ -182,7 +182,7 @@ internal sealed class CaptureSessionCoordinator(
                     warnings.Add(warning);
                     reservedTransport = ArtifactTransport.Sidecar;
                     publicationReservation = await embeddedArtifacts.ReserveAsync(
-                        request.OutputRoot,
+                        request.OutputName,
                         active.Metadata.SessionId,
                         active.Metadata.StartedAtUtc,
                         ArtifactTransport.Sidecar,

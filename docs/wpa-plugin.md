@@ -31,9 +31,9 @@ For each `(ETL source path, full session ID)`, the plugin first checks the deter
 When the exact stream is absent, the plugin checks only these sibling candidates:
 
 1. `<etl-stem>.etwsnap.zip`
-2. `<etl-stem>.<full-session-id>.etwsnap.zip`
+2. `<etl-stem>-1.etwsnap.zip`, `<etl-stem>-2.etwsnap.zip`, and other canonical positive integer suffixes
 
-The plugin never recursively scans directories or guesses from frame filenames. It can also open `.etwsnap.zip` directly. Traced ZIPs require their matching sibling ETL; screenshot-only ZIPs build a timeline from manifest QPC metadata.
+The plugin searches only the ETL's own directory, never subdirectories. Numbered candidates are sorted numerically and mapped to sessions by their internal full session ID. The plugin can also open `.etwsnap.zip` directly. Traced ZIPs require their matching sibling ETL; screenshot-only ZIPs build a timeline from manifest QPC metadata.
 
 A manifest must have a supported schema, matching full session ID and provider GUID, unique frame numbers, contained relative image paths, matching ETW frame metadata, and a matching committed SHA-256 when available. Artifact failures do not hide ETW rows.
 
@@ -50,7 +50,8 @@ Exported multi-session layout:
 
 ```text
 capture.etl
-capture.<full-session-id>.etwsnap.zip
+capture-1.etwsnap.zip
+capture-2.etwsnap.zip
 ```
 
 ## Build and compatibility

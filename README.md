@@ -58,31 +58,31 @@ The user profile is validated and passed to WPR unchanged. `--profile` requires 
 
 Before WPR starts, ETWSnap stages byte-for-byte profile copies under `%LOCALAPPDATA%\EtwSnap\Wpr` so package-manager junctions and symbolic links are never passed to WPR. Staged files are removed after stop, cancel, failure, or recovery.
 
-Stop and choose the output root:
+Stop and choose an extensionless output name:
 
 ```powershell
-etwsnap stop D:\Captures
+etwsnap stop D:\Captures\capture
 ```
 
-The destination is reserved before capture stops. If it is invalid or unwritable, recording remains active so `stop` can be retried with another path.
+ETWSnap appends `.etl` and `.etwsnap.zip` as appropriate. Exact colliding output files are replaced. If the destination is invalid or unwritable before capture stops, recording remains active so `stop` can be retried with another name.
 
 Screenshot-only sessions produce one canonical artifact ZIP:
 
 ```text
-D:\Captures\etwsnap-20260904T142530Z-a1b2c3d4.etwsnap.zip
+D:\Captures\capture.etwsnap.zip
 ```
 
 Traced sessions produce a sibling pair with the same basename:
 
 ```text
-D:\Captures\etwsnap-20260904T142530Z-a1b2c3d4.etl
-D:\Captures\etwsnap-20260904T142530Z-a1b2c3d4.etwsnap.zip
+D:\Captures\capture.etl
+D:\Captures\capture.etwsnap.zip
 ```
 
 For a session started with `--trace`, artifacts can instead be attached to a standalone ETL on NTFS:
 
 ```powershell
-etwsnap stop D:\Captures --embed-artifacts
+etwsnap stop D:\Captures\capture --embed-artifacts
 ```
 
 The ETL primary bytes remain an ordinary ETL. Successful embedded output leaves only the ETL; its named stream contains exactly the same canonical ZIP payload used by sidecar mode. If embedding is unsupported or fails, ETWSnap saves the normal ETL and `.etwsnap.zip` pair and prints a warning.

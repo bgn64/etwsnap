@@ -120,6 +120,41 @@ public sealed class EmbeddedBundleTests
     }
 
     [Fact]
+    public void OutputNameProducesMatchingEtlAndZipPaths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "capture.v1");
+
+        var paths = EmbeddedArtifactConstants.GetOutputPaths(root);
+
+        Assert.Equal(root + ".etl", paths.EtlPath);
+        Assert.Equal(root + ".etwsnap.zip", paths.ZipPath);
+    }
+
+    [Theory]
+    [InlineData("capture.etl")]
+    [InlineData("capture.zip")]
+    [InlineData("capture.etwsnap.zip")]
+    public void OutputNameRejectsEtlAndZipExtensions(string name)
+    {
+        Assert.Throws<ArgumentException>(() => EmbeddedArtifactConstants.GetOutputPaths(name));
+    }
+
+    [Fact]
+    public void OutputNameRejectsDirectoryOnlyPath()
+    {
+        Assert.Throws<ArgumentException>(() => EmbeddedArtifactConstants.GetOutputPaths(Path.GetTempPath()));
+    }
+
+    [Fact]
+    public void IndexedArtifactNamesAreOneBasedAndCanonical()
+    {
+        Assert.Equal("capture-1.etwsnap.zip", EmbeddedArtifactConstants.GetIndexedArtifactFileName("capture", 1));
+        Assert.True(EmbeddedArtifactConstants.TryParseIndexedArtifactFileName("capture", "capture-12.etwsnap.zip", out var index));
+        Assert.Equal(12, index);
+        Assert.False(EmbeddedArtifactConstants.TryParseIndexedArtifactFileName("capture", "capture-01.etwsnap.zip", out _));
+    }
+
+    [Fact]
     public async Task InspectionRejectsNonCanonicalArchiveEntryName()
     {
         using var fixture = new BundleFixture();

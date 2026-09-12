@@ -155,10 +155,13 @@ public sealed class EtwSnapTraceParser : SourceParser<EtwSnapEvent, EtwSnapParsi
         {
             return direct;
         }
-        var suffix = Path.GetExtension(stem);
-        return suffix.Length == 33 && Guid.TryParseExact(suffix[1..], "N", out _)
-            ? stem[..^suffix.Length] + ".etl"
-            : direct;
+        var fileName = Path.GetFileName(stem);
+        var separator = fileName.LastIndexOf('-');
+        if (separator > 0 && int.TryParse(fileName[(separator + 1)..], out var index) && index >= 1)
+        {
+            return Path.Combine(Path.GetDirectoryName(stem)!, fileName[..separator] + ".etl");
+        }
+        return direct;
     }
 
     internal static bool TryParse(TraceEvent data, out EtwSnapEvent parsedEvent)
