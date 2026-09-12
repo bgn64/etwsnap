@@ -17,25 +17,27 @@ The ETW event-header timestamp is the trace timeline timestamp. Presentation tim
 
 ## Artifact events
 
-Artifact event contract version 1 adds two events without changing existing event schemas.
+Artifact event contract version 2 describes the canonical artifact ZIP payload.
 
-`ArtifactReference` is emitted after the final output directory is reserved and before native capture and ETWSnap-managed WPR stop. It is therefore present in a normal ETWSnap-managed trace.
+`ArtifactReference` is emitted after output reservation and before native capture and ETWSnap-managed WPR stop. It is therefore present in a normal ETWSnap-managed trace.
 
 Fields:
 
 - `ContractVersion`
 - `SessionId`
-- `ArtifactDirectory`
-- `SessionDirectoryName`
-- `ManifestRelativePath`
-- `PortableManifestRelativePath`
+- `ArtifactPath` (prospective sidecar path or ETL named-stream locator)
+- `ArtifactFileName` (canonical `.etwsnap.zip` filename)
 - `ManifestSchemaVersion`
+- `BundleSchemaVersion`
+- `RequestedTransport` (`Sidecar` or `Embedded`)
 
 `ArtifactCommitted` is emitted after `manifest.json` is atomically finalized. ETWSnap-managed WPR has already stopped at this point, so this event normally appears only in an independently running external trace.
 
 It repeats the reference fields and adds:
 
 - `ManifestSha256`, lowercase hexadecimal over the exact committed bytes
+- `ArtifactSha256`, lowercase hexadecimal over the exact canonical ZIP bytes
+- `ActualTransport` (`Sidecar` or `Embedded`)
 - `Status`
 - accepted, retained, evicted, dropped, native-error, exported, and failed frame counts
 

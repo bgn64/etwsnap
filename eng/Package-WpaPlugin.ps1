@@ -117,6 +117,10 @@ try {
         if ($metadata.Identity.Id -ne 'bgn64.EtwSnap.WpaPlugin' -or $metadata.Identity.Version -ne $Version) {
             throw "Unexpected WPA plugin identity: $($metadata.Identity.Id) $($metadata.Identity.Version)"
         }
+        if ($metadata.DisplayName -ne 'ETWSnap' -or
+            $metadata.Description -ne 'Loads ETWSnap screenshot sessions from ETL traces and .etwsnap.zip artifacts in Windows Performance Analyzer.') {
+            throw "Unexpected WPA plugin display metadata: $($metadata.DisplayName) — $($metadata.Description)"
+        }
 
         $contentsReader = [IO.StreamReader]::new($archive.GetEntry('contentsmetadata.json').Open())
         try {
@@ -129,6 +133,18 @@ try {
         foreach ($table in @('ETWSnap Screenshots', 'ETWSnap Sessions')) {
             if ($table -notin $tableNames) {
                 throw "The WPA plugin package metadata is missing table '$table'."
+            }
+        }
+        $sourceNames = @($contents.ProcessingSources.Name)
+        foreach ($sourceName in @('ETWSnap', 'ETWSnap Artifact ZIP')) {
+            if ($sourceName -notin $sourceNames) {
+                throw "The WPA plugin package metadata is missing processing source '$sourceName'."
+            }
+        }
+        $extensions = @($contents.ProcessingSources.SupportedDataSources.Name)
+        foreach ($extension in @('etl', 'zip')) {
+            if ($extension -notin $extensions) {
+                throw "The WPA plugin package metadata is missing extension '$extension'."
             }
         }
     }

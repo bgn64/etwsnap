@@ -120,11 +120,11 @@ void EtwProvider::ArtifactReference(const EtwSnapArtifactReference& artifact) no
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
         TraceLoggingUInt32(artifact.ContractVersion, "ContractVersion"),
         TraceLoggingGuid(artifact.SessionId, "SessionId"),
-        TraceLoggingWideString(artifact.ArtifactDirectory, "ArtifactDirectory"),
-        TraceLoggingWideString(artifact.SessionDirectoryName, "SessionDirectoryName"),
-        TraceLoggingWideString(artifact.ManifestRelativePath, "ManifestRelativePath"),
-        TraceLoggingWideString(artifact.PortableManifestRelativePath, "PortableManifestRelativePath"),
-        TraceLoggingUInt32(artifact.ManifestSchemaVersion, "ManifestSchemaVersion"));
+        TraceLoggingWideString(artifact.ArtifactPath, "ArtifactPath"),
+        TraceLoggingWideString(artifact.ArtifactFileName, "ArtifactFileName"),
+        TraceLoggingUInt32(artifact.ManifestSchemaVersion, "ManifestSchemaVersion"),
+        TraceLoggingUInt32(artifact.BundleSchemaVersion, "BundleSchemaVersion"),
+        TraceLoggingUInt32(artifact.RequestedTransport, "RequestedTransport"));
 }
 
 void EtwProvider::ArtifactCommitted(const EtwSnapArtifactCommitted& artifact) noexcept
@@ -135,12 +135,14 @@ void EtwProvider::ArtifactCommitted(const EtwSnapArtifactCommitted& artifact) no
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
         TraceLoggingUInt32(artifact.ContractVersion, "ContractVersion"),
         TraceLoggingGuid(artifact.SessionId, "SessionId"),
-        TraceLoggingWideString(artifact.ArtifactDirectory, "ArtifactDirectory"),
-        TraceLoggingWideString(artifact.SessionDirectoryName, "SessionDirectoryName"),
-        TraceLoggingWideString(artifact.ManifestRelativePath, "ManifestRelativePath"),
-        TraceLoggingWideString(artifact.PortableManifestRelativePath, "PortableManifestRelativePath"),
+        TraceLoggingWideString(artifact.ArtifactPath, "ArtifactPath"),
+        TraceLoggingWideString(artifact.ArtifactFileName, "ArtifactFileName"),
         TraceLoggingUInt32(artifact.ManifestSchemaVersion, "ManifestSchemaVersion"),
+        TraceLoggingUInt32(artifact.BundleSchemaVersion, "BundleSchemaVersion"),
+        TraceLoggingUInt32(artifact.RequestedTransport, "RequestedTransport"),
+        TraceLoggingUInt32(artifact.ActualTransport, "ActualTransport"),
         TraceLoggingWideString(artifact.ManifestSha256, "ManifestSha256"),
+        TraceLoggingWideString(artifact.ArtifactSha256, "ArtifactSha256"),
         TraceLoggingWideString(artifact.Status, "Status"),
         TraceLoggingUInt64(artifact.AcceptedFrames, "AcceptedFrames"),
         TraceLoggingUInt64(artifact.RetainedFrames, "RetainedFrames"),

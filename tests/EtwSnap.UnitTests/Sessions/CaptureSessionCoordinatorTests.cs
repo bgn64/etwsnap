@@ -26,7 +26,9 @@ public sealed class CaptureSessionCoordinatorTests
     [Fact]
     public async Task FailedDestinationReservationLeavesCaptureRunningForRetry()
     {
-        var fixture = new CoordinatorFixture { ReservationError = new IOException("read-only destination") };
+        var fixture = new CoordinatorFixture();
+        fixture.EmbeddedPublisher.ReservationError = new IOException("read-only destination");
+        fixture.EmbeddedPublisher.FailAllReservations = true;
         await fixture.Coordinator.StartAsync(CreateRequest(), default);
         var stopRequest = WireMessage.CreateRequest(CommandKind.Stop, new StopCaptureRequest(@"Z:\Denied"));
 
@@ -78,10 +80,11 @@ public sealed class CaptureSessionCoordinatorTests
         Assert.Equal(1, fixture.Capture.StopCalls);
         Assert.True(fixture.Capture.Disposed);
         Assert.Equal(CaptureSessionState.Idle, fixture.Coordinator.GetStatus().State);
-        Assert.Equal(["Reserve", "ArtifactReference", "CaptureStop", "WprStop", "Write", "ArtifactCommitted"], fixture.StopOperations);
+        Assert.Equal(["ArtifactReserve", "ArtifactReference", "CaptureStop", "WprStop", "Write", "ArtifactPublish", "ArtifactCommitted"], fixture.StopOperations);
         Assert.Equal(started.SessionId, fixture.ArtifactEvents.Reference?.SessionId);
-        Assert.Equal("sessions/" + started.SessionId.ToString("N") + "/manifest.json", fixture.ArtifactEvents.Reference?.PortableManifestRelativePath);
+        Assert.Equal("session.etwsnap.zip", fixture.ArtifactEvents.Reference?.ArtifactFileName);
         Assert.Equal("hash", fixture.ArtifactEvents.Committed?.ManifestSha256);
+        Assert.Equal("artifact-hash", fixture.ArtifactEvents.Committed?.ArtifactSha256);
     }
 
     [Fact]
@@ -127,7 +130,7 @@ public sealed class CaptureSessionCoordinatorTests
     public async Task EmbeddedStopPublishesStandaloneEtl()
     {
         var fixture = new CoordinatorFixture();
-        await fixture.Coordinator.StartAsync(CreateRequest() with { Trace = true }, default);
+        var started = await fixture.Coordinator.StartAsync(CreateRequest() with { Trace = true }, default);
         var request = WireMessage.CreateRequest(
             CommandKind.Stop,
             new StopCaptureRequest(@"D:\Captures", ArtifactTransport.Embedded));
@@ -140,10 +143,13 @@ public sealed class CaptureSessionCoordinatorTests
 
         Assert.Equal(ArtifactTransport.Embedded, result.RequestedArtifactTransport);
         Assert.Equal(ArtifactTransport.Embedded, result.ActualArtifactTransport);
-        Assert.Equal(@"D:\Captures\session.etl", result.ArtifactPath);
-        Assert.Null(result.OutputDirectory);
+        Assert.Equal(@"D:\Captures\session.etl", result.TracePath);
+        Assert.Null(result.ArtifactZipPath);
         Assert.Equal(
-            ["EmbeddedReserve", "ArtifactReference", "CaptureStop", "WprStop", "Write", "EmbeddedPublish", "ArtifactCommitted"],
+            @"D:\Captures\session.etl:EtwSnap.Session." + started.SessionId.ToString("N"),
+            fixture.ArtifactEvents.Committed?.ArtifactPath);
+        Assert.Equal(
+            ["ArtifactReserve", "ArtifactReference", "CaptureStop", "WprStop", "Write", "ArtifactPublish", "ArtifactCommitted"],
             fixture.StopOperations);
     }
 
@@ -163,22 +169,21 @@ public sealed class CaptureSessionCoordinatorTests
             request,
             default);
 
-        Assert.Equal(ArtifactTransport.Folder, result.ActualArtifactTransport);
+        Assert.Equal(ArtifactTransport.Sidecar, result.ActualArtifactTransport);
         Assert.Contains("streams unsupported", result.ArtifactWarning);
-        Assert.Equal(["EmbeddedReserve", "Reserve", "ArtifactReference", "CaptureStop", "WprStop", "Write", "ArtifactCommitted"], fixture.StopOperations);
+        Assert.Equal(["ArtifactReserve", "ArtifactReserve", "ArtifactReference", "CaptureStop", "WprStop", "Write", "ArtifactPublish", "ArtifactCommitted"], fixture.StopOperations);
     }
 
     [Fact]
-    public async Task EmbeddedPublicationFailureReturnsFolderAndWarning()
+    public async Task EmbeddedPublicationFailureReturnsSidecarAndWarning()
     {
         var fixture = new CoordinatorFixture();
         fixture.EmbeddedPublisher.Publication = new ArtifactPublication(
-            ArtifactTransport.Folder,
-            @"D:\Captures\session",
-            @"D:\Captures\session\manifest.json",
-            @"D:\Captures\session\trace.etl",
-            @"D:\Captures\session",
-            "Embedded artifact publication failed; saved a normal session folder instead. disk full");
+            ArtifactTransport.Sidecar,
+            @"D:\Captures\session.etwsnap.zip",
+            @"D:\Captures\session.etl",
+            "artifact-hash",
+            "Embedded artifact publication failed; saved a sidecar artifact ZIP instead. disk full");
         await fixture.Coordinator.StartAsync(CreateRequest() with { Trace = true }, default);
         var request = WireMessage.CreateRequest(
             CommandKind.Stop,
@@ -190,8 +195,10 @@ public sealed class CaptureSessionCoordinatorTests
             request,
             default);
 
-        Assert.Equal(ArtifactTransport.Folder, result.ActualArtifactTransport);
-        Assert.Equal(@"D:\Captures\session", result.OutputDirectory);
+        Assert.Equal(ArtifactTransport.Sidecar, result.ActualArtifactTransport);
+        Assert.Equal(@"D:\Captures\session.etwsnap.zip", result.ArtifactZipPath);
+        Assert.Equal(@"D:\Captures\session.etwsnap.zip", fixture.ArtifactEvents.Committed?.ArtifactPath);
+        Assert.Equal(ArtifactTransport.Sidecar, fixture.ArtifactEvents.Committed?.ActualTransport);
         Assert.Contains("disk full", result.ArtifactWarning);
     }
 
@@ -211,7 +218,6 @@ public sealed class CaptureSessionCoordinatorTests
         public FakeArtifactEventEmitter ArtifactEvents { get; }
         public FakeEmbeddedArtifactPublisher EmbeddedPublisher { get; }
         public FakeRecoveryStore Recovery { get; } = new();
-        public Exception? ReservationError { get; set; }
 
         public CoordinatorFixture()
         {
@@ -222,7 +228,7 @@ public sealed class CaptureSessionCoordinatorTests
             Coordinator = new CaptureSessionCoordinator(
                 () => Factory,
                 new FakeWprController(StopOperations),
-                new FakeArtifactWriter(() => ReservationError, StopOperations),
+                new FakeArtifactWriter(() => null, StopOperations),
                 EmbeddedPublisher,
                 ArtifactEvents,
                 Recovery,
@@ -235,22 +241,19 @@ public sealed class CaptureSessionCoordinatorTests
     private sealed class FakeEmbeddedArtifactPublisher(List<string> stopOperations) : IEmbeddedArtifactPublisher
     {
         public Exception? ReservationError { get; set; }
-        public ArtifactPublication Publication { get; set; } = new(
-            ArtifactTransport.Embedded,
-            null,
-            null,
-            @"D:\Captures\session.etl",
-            @"D:\Captures\session.etl",
-            null);
+        public bool FailAllReservations { get; set; }
+        public ArtifactPublication? Publication { get; set; }
 
         public Task<EmbeddedArtifactReservation> ReserveAsync(
             string outputRoot,
             Guid sessionId,
             DateTimeOffset startedAtUtc,
+            ArtifactTransport transport,
+            bool tracing,
             CancellationToken cancellationToken)
         {
-            stopOperations.Add("EmbeddedReserve");
-            if (ReservationError is not null)
+            stopOperations.Add("ArtifactReserve");
+            if (ReservationError is not null && (FailAllReservations || transport == ArtifactTransport.Embedded))
             {
                 throw ReservationError;
             }
@@ -265,17 +268,24 @@ public sealed class CaptureSessionCoordinatorTests
             return Task.FromResult(new EmbeddedArtifactReservation(
                 staging,
                 @"D:\Captures\session.etl",
-                @"D:\Captures\session"));
+                @"D:\Captures\session.etwsnap.zip",
+                null));
         }
 
         public Task<ArtifactPublication> PublishAsync(
             EmbeddedArtifactReservation reservation,
             SessionMetadata session,
+            ArtifactTransport requestedTransport,
             string? fallbackReason,
             CancellationToken cancellationToken)
         {
-            stopOperations.Add("EmbeddedPublish");
-            return Task.FromResult(Publication);
+            stopOperations.Add("ArtifactPublish");
+            return Task.FromResult(Publication ?? new ArtifactPublication(
+                requestedTransport,
+                requestedTransport == ArtifactTransport.Sidecar ? reservation.FinalZipPath : null,
+                reservation.FinalEtlPath,
+                "artifact-hash",
+                reservation.Warning));
         }
     }
 

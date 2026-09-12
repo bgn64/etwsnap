@@ -1,7 +1,6 @@
 <Solution>
   <Configurations>
     <Platform Name="Any CPU" />
-    <Project Path="src/EtwSnap.Artifacts/EtwSnap.Artifacts.csproj" />
     <Platform Name="x64" />
   </Configurations>
   <Folder Name="/src/">

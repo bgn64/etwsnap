@@ -3,15 +3,15 @@ using Microsoft.Performance.SDK.Processing;
 namespace EtwSnap.WpaPlugin;
 
 [ProcessingSource(
-    "{4E070D12-F361-4F68-8E54-1B5D78E25D09}",
-    "ETWSnap",
-    "ETWSnap screenshot sessions correlated with ETW timeline events")]
-[FileDataSource(".etl", "ETWSnap ETL traces")]
-public sealed class EtwSnapProcessingSource : ProcessingSource
+    "{D8B705BC-7A8A-4E34-83A0-9DDCAC4756C8}",
+    "ETWSnap Artifact ZIP",
+    "ETWSnap screenshot sessions from .etwsnap.zip artifacts")]
+[FileDataSource(".zip", "ETWSnap artifact ZIPs")]
+public sealed class EtwSnapArtifactProcessingSource : ProcessingSource
 {
     protected override bool IsDataSourceSupportedCore(IDataSource dataSource) =>
         dataSource is FileDataSource file &&
-        string.Equals(Path.GetExtension(file.FullPath), ".etl", StringComparison.OrdinalIgnoreCase);
+        file.FullPath.EndsWith(EtwSnap.Artifacts.EmbeddedArtifactConstants.ArtifactFileExtension, StringComparison.OrdinalIgnoreCase);
 
     protected override ICustomDataProcessor CreateProcessorCore(
         IEnumerable<IDataSource> dataSources,

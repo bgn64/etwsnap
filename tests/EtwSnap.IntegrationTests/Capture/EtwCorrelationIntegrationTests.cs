@@ -49,7 +49,12 @@ public sealed class EtwCorrelationIntegrationTests
 
             var writer = new SessionArtifactWriter();
             var reservation = writer.Reserve(outputRoot, sessionId, DateTimeOffset.UtcNow);
-            var artifactReference = ArtifactEvents.CreateReference(sessionId, reservation);
+            var artifactPath = Path.Combine(reservation.DirectoryPath, "session.etwsnap.zip");
+            var artifactReference = ArtifactEvents.CreateReference(
+                sessionId,
+                artifactPath,
+                Path.GetFileName(artifactPath),
+                ArtifactTransport.Sidecar);
             NativeArtifactEventEmitter.Instance.EmitReference(artifactReference);
             capture.Stop();
             var stoppedStats = capture.GetStats();
@@ -78,7 +83,11 @@ public sealed class EtwCorrelationIntegrationTests
                 default,
                 (_, _) => ValueTask.CompletedTask);
             NativeArtifactEventEmitter.Instance.EmitCommitted(
-                ArtifactEvents.CreateCommitted(artifactReference, artifactResult, stoppedStats));
+                ArtifactEvents.CreateCommitted(
+                    artifactReference,
+                    artifactResult,
+                    new ArtifactPublication(ArtifactTransport.Sidecar, artifactPath, null, new string('a', 64), null),
+                    stoppedStats));
             trace.Stop();
 
             var events = new Dictionary<ulong, CorrelationEvent>();
@@ -114,8 +123,8 @@ public sealed class EtwCorrelationIntegrationTests
                     case "ArtifactReference":
                         parsedReference = new ParsedArtifactReference(
                             Convert.ToUInt32(data.PayloadByName("ContractVersion")),
-                            Convert.ToString(data.PayloadByName("ArtifactDirectory"))!,
-                            Convert.ToString(data.PayloadByName("PortableManifestRelativePath"))!,
+                            Convert.ToString(data.PayloadByName("ArtifactPath"))!,
+                            Convert.ToString(data.PayloadByName("ArtifactFileName"))!,
                             eventOrdinal);
                         break;
                     case "RecordingStopped":
@@ -124,6 +133,7 @@ public sealed class EtwCorrelationIntegrationTests
                     case "ArtifactCommitted":
                         parsedCommitted = new ParsedArtifactCommitted(
                             Convert.ToString(data.PayloadByName("ManifestSha256"))!,
+                            Convert.ToString(data.PayloadByName("ArtifactSha256"))!,
                             Convert.ToString(data.PayloadByName("Status"))!,
                             eventOrdinal);
                         break;
@@ -142,10 +152,11 @@ public sealed class EtwCorrelationIntegrationTests
 
             Assert.NotNull(parsedReference);
             Assert.Equal(EtwSnapConstants.ArtifactContractVersion, checked((int)parsedReference.ContractVersion));
-            Assert.Equal(reservation.DirectoryPath, parsedReference.ArtifactDirectory);
-            Assert.Equal($"sessions/{sessionId:N}/manifest.json", parsedReference.PortableManifestRelativePath);
+            Assert.Equal(artifactPath, parsedReference.ArtifactPath);
+            Assert.Equal("session.etwsnap.zip", parsedReference.ArtifactFileName);
             Assert.NotNull(parsedCommitted);
             Assert.Equal(artifactResult.ManifestSha256, parsedCommitted.ManifestSha256);
+            Assert.Equal(new string('a', 64), parsedCommitted.ArtifactSha256);
             Assert.Equal(artifactResult.Status, parsedCommitted.Status);
             Assert.True(parsedReference.Ordinal < recordingStoppedOrdinal);
             Assert.True(recordingStoppedOrdinal < parsedCommitted.Ordinal);
@@ -176,10 +187,10 @@ public sealed class EtwCorrelationIntegrationTests
     private sealed record CorrelationEvent(long PresentationTime100ns, long CallbackQpc, uint Width, uint Height);
     private sealed record ParsedArtifactReference(
         uint ContractVersion,
-        string ArtifactDirectory,
-        string PortableManifestRelativePath,
+        string ArtifactPath,
+        string ArtifactFileName,
         int Ordinal);
-    private sealed record ParsedArtifactCommitted(string ManifestSha256, string Status, int Ordinal);
+    private sealed record ParsedArtifactCommitted(string ManifestSha256, string ArtifactSha256, string Status, int Ordinal);
 
     private sealed class PluginEventCollector
         : ISourceDataProcessor<EtwSnapEvent, EtwSnapParsingContext, Type>

@@ -11,7 +11,7 @@ public sealed record EmbeddedBundleDescriptor(
     DateTimeOffset CreatedAtUtc,
     int ManifestSchemaVersion,
     string ManifestSha256,
-    string PrimaryEtlSha256,
+    string? PrimaryEtlSha256,
     IReadOnlyList<EmbeddedBundleEntry> Entries);
 
 public sealed record EmbeddedBundleInspection(

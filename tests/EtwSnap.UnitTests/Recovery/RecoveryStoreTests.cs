@@ -10,7 +10,7 @@ namespace EtwSnap.UnitTests.Recovery;
 public sealed class RecoveryStoreTests
 {
     [Fact]
-    public async Task AbandonedEmbeddedStagingIsPublishedAsCleanFolder()
+    public async Task AbandonedEmbeddedStagingIsPublishedAsSidecarZip()
     {
         var root = Path.Combine(Path.GetTempPath(), $"etwsnap-recovery-{Guid.NewGuid():N}");
         var stateRoot = Path.Combine(root, "state");
@@ -31,11 +31,12 @@ public sealed class RecoveryStoreTests
             var name = $"etwsnap-20260101T000000Z-{sessionId:N}"[..34];
             var staging = Path.Combine(outputRoot, ".etwsnap-staging", name);
             var finalEtl = Path.Combine(outputRoot, name + ".etl");
+            var finalZip = Path.Combine(outputRoot, EmbeddedArtifactConstants.GetArtifactFileName(name));
             Directory.CreateDirectory(Path.Combine(staging, "frames"));
             var tracePath = Path.Combine(staging, "trace.etl");
             var primaryBytes = "etl-primary"u8.ToArray();
             await File.WriteAllBytesAsync(tracePath, primaryBytes);
-            await File.WriteAllTextAsync(Path.Combine(staging, "manifest.json"), "{\"schemaVersion\":1}");
+            await File.WriteAllTextAsync(Path.Combine(staging, "manifest.json"), "{\"schemaVersion\":2}");
             await File.WriteAllBytesAsync(Path.Combine(staging, ".reserved"), []);
             var streamName = EmbeddedArtifactConstants.GetStreamName(sessionId);
             await File.WriteAllBytesAsync(new NamedStreamStore().GetStreamPath(tracePath, streamName), "partial"u8.ToArray());
@@ -56,6 +57,7 @@ public sealed class RecoveryStoreTests
                     null,
                     staging,
                     finalEtl,
+                    finalZip,
                     streamName),
                 default);
             await store.MarkAsync(sessionId, "Persisting", staging, null, default);
@@ -63,19 +65,17 @@ public sealed class RecoveryStoreTests
             var wpr = new FakeWprController();
             await store.RecoverAbandonedAsync(wpr, default);
 
-            var fallback = Path.ChangeExtension(finalEtl, null)!;
-            Assert.True(Directory.Exists(fallback));
             Assert.False(Directory.Exists(staging));
-            Assert.False(File.Exists(Path.Combine(fallback, ".reserved")));
-            Assert.Equal(primaryBytes, await File.ReadAllBytesAsync(Path.Combine(fallback, "trace.etl")));
-            Assert.Empty(new NamedStreamStore().EnumerateEtwSnapStreams(Path.Combine(fallback, "trace.etl")));
+            Assert.True(File.Exists(finalZip));
+            Assert.Equal(primaryBytes, await File.ReadAllBytesAsync(finalEtl));
+            Assert.Empty(new NamedStreamStore().EnumerateEtwSnapStreams(finalEtl));
             Assert.Equal(1, wpr.CancelCalls);
 
             await using var stream = File.OpenRead(Path.Combine(stateRoot, sessionId.ToString("N"), "session.json"));
             using var state = await JsonDocument.ParseAsync(stream);
             Assert.Equal("Partial", state.RootElement.GetProperty("status").GetString());
-            Assert.Equal(fallback, state.RootElement.GetProperty("outputDirectory").GetString());
-            Assert.Equal((int)ArtifactTransport.Folder, state.RootElement.GetProperty("artifacts").GetProperty("actualTransport").GetInt32());
+            Assert.Equal(finalZip, state.RootElement.GetProperty("outputDirectory").GetString());
+            Assert.Equal((int)ArtifactTransport.Sidecar, state.RootElement.GetProperty("artifacts").GetProperty("actualTransport").GetInt32());
         }
         finally
         {
@@ -87,7 +87,7 @@ public sealed class RecoveryStoreTests
     }
 
     [Fact]
-    public async Task MalformedPublishedBundleDoesNotBlockStagingRecovery()
+    public async Task MalformedPublishedBundleFallsBackToSidecarWithCleanEtl()
     {
         var root = Path.Combine(Path.GetTempPath(), $"etwsnap-recovery-{Guid.NewGuid():N}");
         var stateRoot = Path.Combine(root, "state");
@@ -98,10 +98,52 @@ public sealed class RecoveryStoreTests
             var sessionId = Guid.NewGuid();
             var staging = Path.Combine(outputRoot, ".etwsnap-staging", "session");
             var finalEtl = Path.Combine(outputRoot, "session.etl");
+            var finalZip = Path.Combine(outputRoot, "session.etwsnap.zip");
             Directory.CreateDirectory(staging);
             await File.WriteAllBytesAsync(Path.Combine(staging, "trace.etl"), "staged-etl"u8.ToArray());
             await File.WriteAllBytesAsync(Path.Combine(staging, ".reserved"), []);
+            await File.WriteAllBytesAsync(
+                Path.Combine(staging, "manifest.json"),
+                JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    schemaVersion = 2,
+                    sessionId,
+                    status = "Complete",
+                    startedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1),
+                    stoppedAtUtc = DateTimeOffset.UtcNow,
+                    qpcFrequency = 10_000_000,
+                    capture = new
+                    {
+                        trace = true,
+                        target = new { kind = 0, handle = 0 },
+                        framesPerSecond = 30,
+                        bufferMegabytes = 500,
+                        captureCursor = true,
+                    },
+                    provider = new { name = "ETWSnap-Service", id = EtwSnap.Contracts.EtwSnapConstants.ProviderId },
+                    trace = new
+                    {
+                        instanceName = "test",
+                        supplementalProfilePath = "EtwSnap.wprp",
+                        supplementalProfileHash = "hash",
+                        userProfilePath = (string?)null,
+                        userProfileSelector = (string?)null,
+                        userProfileHash = (string?)null,
+                    },
+                    statistics = new
+                    {
+                        acceptedFrames = 0,
+                        retainedFrames = 0,
+                        evictedFrames = 0,
+                        droppedFrames = 0,
+                        nativeErrors = 0,
+                        exportedFrames = 0,
+                        failedFrames = 0,
+                    },
+                    frames = Array.Empty<object>(),
+                }));
             await File.WriteAllBytesAsync(finalEtl, "final-etl"u8.ToArray());
+            File.Delete(Path.Combine(staging, "trace.etl"));
             var streamName = EmbeddedArtifactConstants.GetStreamName(sessionId);
             await File.WriteAllBytesAsync(
                 new NamedStreamStore().GetStreamPath(finalEtl, streamName),
@@ -118,14 +160,16 @@ public sealed class RecoveryStoreTests
             await store.BeginAsync(sessionId, DateTimeOffset.UtcNow, request, default);
             await store.MarkArtifactsAsync(
                 sessionId,
-                new RecoveryArtifactState(ArtifactTransport.Embedded, null, staging, finalEtl, streamName),
+                new RecoveryArtifactState(ArtifactTransport.Embedded, null, staging, finalEtl, finalZip, streamName),
                 default);
             await store.MarkAsync(sessionId, "Persisting", staging, null, default);
 
             await store.RecoverAbandonedAsync(new FakeWprController(), default);
 
-            Assert.True(Directory.Exists(Path.Combine(outputRoot, "session")));
+            Assert.False(Directory.Exists(staging));
             Assert.True(File.Exists(finalEtl));
+            Assert.True(File.Exists(finalZip));
+            Assert.Empty(new NamedStreamStore().EnumerateEtwSnapStreams(finalEtl));
         }
         finally
         {

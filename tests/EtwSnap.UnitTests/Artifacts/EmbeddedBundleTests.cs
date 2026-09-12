@@ -33,6 +33,71 @@ public sealed class EmbeddedBundleTests
         Assert.Contains(inspection.Descriptor.Entries, entry => entry.Path == "frames/frame_00000001.png");
     }
 
+    [Fact]
+    public async Task ScreenshotOnlyBundleHasNoEtlBinding()
+    {
+        using var fixture = new BundleFixture();
+        var sessionId = Guid.NewGuid();
+        var zipPath = Path.Combine(fixture.Root, "screenshots.etwsnap.zip");
+        var bundle = new EmbeddedBundle();
+
+        var descriptor = await bundle.CreateAsync(
+            fixture.SessionDirectory,
+            null,
+            sessionId,
+            Guid.NewGuid(),
+            2,
+            zipPath,
+            default);
+        await using var stream = File.OpenRead(zipPath);
+        var inspection = await bundle.InspectAsync(stream, null, sessionId, default);
+
+        Assert.Null(descriptor.PrimaryEtlSha256);
+        Assert.Null(inspection.Descriptor.PrimaryEtlSha256);
+        Assert.DoesNotContain(inspection.Descriptor.Entries, entry => entry.Path.EndsWith(".etl", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task BundleExcludesEveryEtlFile()
+    {
+        using var fixture = new BundleFixture();
+        File.WriteAllBytes(Path.Combine(fixture.SessionDirectory, "other.etl"), "other-trace"u8.ToArray());
+        var zipPath = Path.Combine(fixture.Root, "no-etls.etwsnap.zip");
+
+        var descriptor = await new EmbeddedBundle().CreateAsync(
+            fixture.SessionDirectory,
+            fixture.EtlPath,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            2,
+            zipPath,
+            default);
+
+        Assert.DoesNotContain(descriptor.Entries, entry => entry.Path.EndsWith(".etl", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task TracedBundleRequiresMatchingEtl()
+    {
+        using var fixture = new BundleFixture();
+        var zipPath = Path.Combine(fixture.Root, "traced.etwsnap.zip");
+        var bundle = new EmbeddedBundle();
+        await bundle.CreateAsync(
+            fixture.SessionDirectory,
+            fixture.EtlPath,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            2,
+            zipPath,
+            default);
+
+        await using var stream = File.OpenRead(zipPath);
+        var exception = await Assert.ThrowsAsync<EmbeddedArtifactException>(() =>
+            bundle.InspectAsync(stream, null, null, default));
+
+        Assert.Contains("matching ETL", exception.Message);
+    }
+
     [Theory]
     [InlineData("../manifest.json")]
     [InlineData("/manifest.json")]
@@ -52,6 +117,41 @@ public sealed class EmbeddedBundleTests
         Assert.True(EmbeddedArtifactConstants.TryParseStreamName(name, out var parsed));
         Assert.Equal(sessionId, parsed);
         Assert.False(EmbeddedArtifactConstants.TryParseStreamName("Other.Stream", out _));
+    }
+
+    [Fact]
+    public void OutputNameProducesMatchingEtlAndZipPaths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "capture.v1");
+
+        var paths = EmbeddedArtifactConstants.GetOutputPaths(root);
+
+        Assert.Equal(root + ".etl", paths.EtlPath);
+        Assert.Equal(root + ".etwsnap.zip", paths.ZipPath);
+    }
+
+    [Theory]
+    [InlineData("capture.etl")]
+    [InlineData("capture.zip")]
+    [InlineData("capture.etwsnap.zip")]
+    public void OutputNameRejectsEtlAndZipExtensions(string name)
+    {
+        Assert.Throws<ArgumentException>(() => EmbeddedArtifactConstants.GetOutputPaths(name));
+    }
+
+    [Fact]
+    public void OutputNameRejectsDirectoryOnlyPath()
+    {
+        Assert.Throws<ArgumentException>(() => EmbeddedArtifactConstants.GetOutputPaths(Path.GetTempPath()));
+    }
+
+    [Fact]
+    public void IndexedArtifactNamesAreOneBasedAndCanonical()
+    {
+        Assert.Equal("capture-1.etwsnap.zip", EmbeddedArtifactConstants.GetIndexedArtifactFileName("capture", 1));
+        Assert.True(EmbeddedArtifactConstants.TryParseIndexedArtifactFileName("capture", "capture-12.etwsnap.zip", out var index));
+        Assert.Equal(12, index);
+        Assert.False(EmbeddedArtifactConstants.TryParseIndexedArtifactFileName("capture", "capture-01.etwsnap.zip", out _));
     }
 
     [Fact]

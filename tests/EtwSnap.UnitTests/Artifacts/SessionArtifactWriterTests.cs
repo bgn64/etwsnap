@@ -44,6 +44,8 @@ public sealed class SessionArtifactWriterTests
             Assert.Equal(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }, signature);
 
             using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(result.ManifestPath));
+            Assert.Equal(2, manifest.RootElement.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(JsonValueKind.Null, manifest.RootElement.GetProperty("trace").ValueKind);
             Assert.Equal(sessionId, manifest.RootElement.GetProperty("sessionId").GetGuid());
             var frame = manifest.RootElement.GetProperty("frames")[0];
             Assert.Equal(42UL, frame.GetProperty("frameNumber").GetUInt64());
@@ -95,6 +97,8 @@ public sealed class SessionArtifactWriterTests
                 (_, _) => ValueTask.CompletedTask);
 
             Assert.Equal(profileContents, await File.ReadAllBytesAsync(Path.Combine(result.OutputDirectory, "EtwSnap.wprp")));
+            using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(result.ManifestPath));
+            Assert.False(manifest.RootElement.GetProperty("trace").TryGetProperty("tracePath", out _));
         }
         finally
         {

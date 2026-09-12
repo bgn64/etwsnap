@@ -10,7 +10,7 @@
 #define ETWSNAP_API __declspec(dllimport)
 #endif
 
-constexpr std::uint32_t ETWSNAP_API_VERSION = 2;
+constexpr std::uint32_t ETWSNAP_API_VERSION = 3;
 
 enum EtwSnapResult : std::int32_t
 {
@@ -79,11 +79,11 @@ struct EtwSnapArtifactReference
     std::uint32_t ApiVersion;
     std::uint32_t ContractVersion;
     std::uint32_t ManifestSchemaVersion;
+    std::uint32_t BundleSchemaVersion;
+    std::uint32_t RequestedTransport;
     GUID SessionId;
-    const wchar_t* ArtifactDirectory;
-    const wchar_t* SessionDirectoryName;
-    const wchar_t* ManifestRelativePath;
-    const wchar_t* PortableManifestRelativePath;
+    const wchar_t* ArtifactPath;
+    const wchar_t* ArtifactFileName;
 };
 
 struct EtwSnapArtifactCommitted
@@ -92,12 +92,14 @@ struct EtwSnapArtifactCommitted
     std::uint32_t ApiVersion;
     std::uint32_t ContractVersion;
     std::uint32_t ManifestSchemaVersion;
+    std::uint32_t BundleSchemaVersion;
+    std::uint32_t RequestedTransport;
+    std::uint32_t ActualTransport;
     GUID SessionId;
-    const wchar_t* ArtifactDirectory;
-    const wchar_t* SessionDirectoryName;
-    const wchar_t* ManifestRelativePath;
-    const wchar_t* PortableManifestRelativePath;
+    const wchar_t* ArtifactPath;
+    const wchar_t* ArtifactFileName;
     const wchar_t* ManifestSha256;
+    const wchar_t* ArtifactSha256;
     const wchar_t* Status;
     std::uint64_t AcceptedFrames;
     std::uint64_t RetainedFrames;
@@ -111,8 +113,8 @@ struct EtwSnapArtifactCommitted
 static_assert(sizeof(EtwSnapCreateOptions) == 56);
 static_assert(sizeof(EtwSnapFrameInfo) == 56);
 static_assert(sizeof(EtwSnapStats) == 56);
-static_assert(sizeof(EtwSnapArtifactReference) == 64);
-static_assert(sizeof(EtwSnapArtifactCommitted) == 136);
+static_assert(sizeof(EtwSnapArtifactReference) == 56);
+static_assert(sizeof(EtwSnapArtifactCommitted) == 144);
 static_assert(offsetof(EtwSnapCreateOptions, BufferBytes) == 32);
 static_assert(offsetof(EtwSnapCreateOptions, SessionId) == 40);
 

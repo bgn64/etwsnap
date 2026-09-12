@@ -127,26 +127,40 @@ internal sealed class CliApplication
 
     private Command CreateStopCommand()
     {
-        var outputRoot = new Argument<string>("output-root") { Description = "Directory under which the session artifact will be created." };
+            var outputName = new Argument<string>("output-name") { Description = "Extensionless output path used for the ETL and artifact ZIP." };
         var embedArtifacts = new Option<bool>("--embed-artifacts") { Description = "Attach session artifacts to the generated ETL when supported." };
         var command = new Command("stop", "Stop recording and save screenshots and any trace.");
-        command.Arguments.Add(outputRoot);
+            command.Arguments.Add(outputName);
         command.Options.Add(embedArtifacts);
         command.SetAction(async (parseResult, cancellationToken) =>
         {
+                string canonicalOutputName;
+                try
+                {
+                    canonicalOutputName = EmbeddedArtifactConstants.GetOutputPaths(parseResult.GetValue(outputName)!).BasePath;
+                }
+                catch (ArgumentException exception)
+                {
+                    return WriteUsageError(exception.Message);
+                }
             var request = new StopCaptureRequest(
-                parseResult.GetValue(outputRoot)!,
-                parseResult.GetValue(embedArtifacts) ? ArtifactTransport.Embedded : ArtifactTransport.Folder);
+                    canonicalOutputName,
+                parseResult.GetValue(embedArtifacts) ? ArtifactTransport.Embedded : ArtifactTransport.Sidecar);
             return await SendAsync<StopCaptureRequest, StopCaptureResult>(
                 CommandKind.Stop,
                 request,
                 result =>
                 {
-                    Console.WriteLine($"Saved {result.ExportedFrames} frames to {result.ArtifactPath ?? result.OutputDirectory}");
+                    Console.WriteLine($"Saved {result.ExportedFrames} frames.");
+                    if (result.ArtifactZipPath is not null)
+                    {
+                        Console.WriteLine($"Artifacts: {result.ArtifactZipPath}");
+                    }
                     if (result.TracePath is not null)
                     {
                         Console.WriteLine($"Trace: {result.TracePath}");
                     }
+                    Console.WriteLine($"Artifact SHA-256: {result.ArtifactSha256}");
                     if (result.ArtifactWarning is not null)
                     {
                         Console.Error.WriteLine($"WARNING: {result.ArtifactWarning}");
@@ -233,7 +247,7 @@ internal sealed class CliApplication
 
     private static Command CreateArtifactsCommand()
     {
-        var artifacts = new Command("artifacts", "Inspect, add, extract, or remove artifacts embedded in an ETL.");
+        var artifacts = new Command("artifacts", "Inspect, add, export, or remove ETWSnap artifact ZIPs.");
         artifacts.Subcommands.Add(CreateArtifactsInspectCommand());
         artifacts.Subcommands.Add(CreateArtifactsAddCommand());
         artifacts.Subcommands.Add(CreateArtifactsRemoveCommand());
@@ -242,13 +256,27 @@ internal sealed class CliApplication
 
     private static Command CreateArtifactsInspectCommand()
     {
-        var trace = new Argument<string>("trace.etl") { Description = "ETL whose embedded artifacts will be inspected." };
-        var command = new Command("inspect", "Verify and describe embedded ETWSnap artifacts.");
-        command.Arguments.Add(trace);
+        var artifact = new Argument<string>("artifact") { Description = "Artifact ZIP or ETL whose embedded artifacts will be inspected." };
+        var command = new Command("inspect", "Verify and describe ETWSnap artifact ZIPs or embedded artifacts.");
+        command.Arguments.Add(artifact);
         command.SetAction(async (parseResult, cancellationToken) =>
             await RunArtifactOperationAsync(async () =>
             {
-                var tracePath = Path.GetFullPath(parseResult.GetValue(trace)!);
+                var path = Path.GetFullPath(parseResult.GetValue(artifact)!);
+                if (path.EndsWith(EmbeddedArtifactConstants.ArtifactFileExtension, StringComparison.OrdinalIgnoreCase))
+                {
+                    var siblingEtl = GetSiblingEtlPath(path);
+                    var archive = await ArtifactArchive.ValidateAsync(
+                        path,
+                        File.Exists(siblingEtl) ? siblingEtl : null,
+                        EtwSnapConstants.ProviderId,
+                        EtwSnapConstants.ManifestSchemaVersion,
+                        cancellationToken).ConfigureAwait(false);
+                    WriteArchiveInspection(archive);
+                    return 0;
+                }
+
+                var tracePath = path;
                 var inspections = await new EmbeddedArtifactManager().InspectAsync(tracePath, cancellationToken).ConfigureAwait(false);
                 Console.WriteLine($"Trace: {tracePath}");
                 if (inspections.Count == 0)
@@ -269,21 +297,22 @@ internal sealed class CliApplication
     private static Command CreateArtifactsAddCommand()
     {
         var trace = new Argument<string>("trace.etl") { Description = "Existing ETL that will receive embedded artifacts." };
-        var sessionFolder = new Argument<string>("session-folder") { Description = "Completed ETWSnap session folder to embed." };
-        var command = new Command("add", "Add a completed session's artifacts to an ETL.");
+        var artifactZip = new Argument<string>("artifact.etwsnap.zip") { Description = "Canonical ETWSnap artifact ZIP to embed." };
+        var command = new Command("add", "Add an artifact ZIP to a matching ETL.");
         command.Arguments.Add(trace);
-        command.Arguments.Add(sessionFolder);
+        command.Arguments.Add(artifactZip);
         command.SetAction(async (parseResult, cancellationToken) =>
             await RunArtifactOperationAsync(async () =>
             {
                 var tracePath = Path.GetFullPath(parseResult.GetValue(trace)!);
-                var session = await SessionArtifactFolder.ValidateAsync(
-                    parseResult.GetValue(sessionFolder)!,
+                var archive = await ArtifactArchive.ValidateAsync(
+                    parseResult.GetValue(artifactZip)!,
+                    tracePath,
                     EtwSnapConstants.ProviderId,
                     EtwSnapConstants.ManifestSchemaVersion,
                     cancellationToken).ConfigureAwait(false);
-                EtlSessionValidator.RequireSession(tracePath, session.Manifest.SessionId, EtwSnapConstants.ProviderId);
-                var result = await new EmbeddedArtifactManager().AddAsync(tracePath, session, cancellationToken).ConfigureAwait(false);
+                EtlSessionValidator.RequireSession(tracePath, archive.Manifest, EtwSnapConstants.ProviderId);
+                var result = await new EmbeddedArtifactManager().AddAsync(tracePath, archive, cancellationToken).ConfigureAwait(false);
                 Console.WriteLine($"Added session {result.Bundle.Descriptor.SessionId:N} to {result.EtlPath}");
                 Console.WriteLine($"Stream: {result.StreamName}");
                 Console.WriteLine($"Frames: {result.Bundle.Descriptor.Entries.Count(entry => entry.Path.StartsWith("frames/", StringComparison.Ordinal))}");
@@ -296,9 +325,9 @@ internal sealed class CliApplication
     {
         var trace = new Argument<string>("trace.etl") { Description = "ETL whose embedded artifacts will be removed." };
         var session = new Option<Guid?>("--session") { Description = "Remove only the specified session. All sessions are selected by default." };
-        var outputRoot = new Option<string?>("--output-root") { Description = "Extract and verify selected artifacts here before removal." };
+        var outputRoot = new Option<string?>("--output-root") { Description = "Export a clean ETL and selected artifact ZIPs here before removal." };
         var force = new Option<bool>("--force") { Description = "Bypass destructive-removal confirmation." };
-        var command = new Command("remove", "Extract or discard embedded ETWSnap artifacts, then remove their streams.");
+        var command = new Command("remove", "Export or discard embedded ETWSnap artifacts, then remove their streams.");
         command.Arguments.Add(trace);
         command.Options.Add(session);
         command.Options.Add(outputRoot);
@@ -323,9 +352,13 @@ internal sealed class CliApplication
                 var extractionRoot = parseResult.GetValue(outputRoot);
                 if (extractionRoot is not null)
                 {
-                    var extraction = await manager.ExtractAsync(tracePath, selected, extractionRoot, cancellationToken).ConfigureAwait(false);
+                    var export = await manager.ExportAsync(tracePath, selected, extractionRoot, cancellationToken).ConfigureAwait(false);
                     manager.Remove(tracePath, selected);
-                    Console.WriteLine($"Extracted {selected.Count} session(s) to {extraction.OutputDirectory}");
+                    Console.WriteLine($"Trace: {export.EtlPath}");
+                    foreach (var zipPath in export.ArtifactZipPaths)
+                    {
+                        Console.WriteLine($"Artifacts: {zipPath}");
+                    }
                     Console.WriteLine($"Removed {selected.Count} embedded artifact stream(s) from {tracePath}");
                     return 0;
                 }
@@ -379,12 +412,41 @@ internal sealed class CliApplication
             Console.WriteLine($"Expanded bytes: {inspection.Bundle.ExpandedBytes}");
             Console.WriteLine($"Frames: {inspection.Bundle.Descriptor.Entries.Count(entry => entry.Path.StartsWith("frames/", StringComparison.Ordinal))}");
             Console.WriteLine($"Manifest SHA-256: {inspection.Bundle.Descriptor.ManifestSha256}");
-            Console.WriteLine($"ETL SHA-256: {inspection.Bundle.Descriptor.PrimaryEtlSha256}");
+            Console.WriteLine($"ETL SHA-256: {inspection.Bundle.Descriptor.PrimaryEtlSha256 ?? "none"}");
         }
         if (inspection.Error is not null)
         {
             Console.WriteLine($"Reason: {inspection.Error}");
         }
+    }
+
+    private static void WriteArchiveInspection(ValidatedArtifactArchive archive)
+    {
+        Console.WriteLine($"Artifacts: {archive.ArchivePath}");
+        Console.WriteLine($"Session: {archive.Manifest.SessionId:N}");
+        Console.WriteLine("Status: Valid");
+        Console.WriteLine($"ZIP bytes: {archive.Bundle.CompressedBytes}");
+        Console.WriteLine($"Expanded bytes: {archive.Bundle.ExpandedBytes}");
+        Console.WriteLine($"Frames: {archive.Manifest.Frames!.Count}");
+        Console.WriteLine($"Manifest SHA-256: {archive.Bundle.Descriptor.ManifestSha256}");
+        Console.WriteLine($"ETL SHA-256: {archive.Bundle.Descriptor.PrimaryEtlSha256 ?? "none"}");
+    }
+
+    private static string GetSiblingEtlPath(string artifactZipPath)
+    {
+        var stem = artifactZipPath[..^EmbeddedArtifactConstants.ArtifactFileExtension.Length];
+        var direct = stem + ".etl";
+        if (File.Exists(direct))
+        {
+            return direct;
+        }
+        var fileName = Path.GetFileName(stem);
+        var separator = fileName.LastIndexOf('-');
+        if (separator > 0 && int.TryParse(fileName[(separator + 1)..], out var index) && index >= 1)
+        {
+            return Path.Combine(Path.GetDirectoryName(stem)!, fileName[..separator] + ".etl");
+        }
+        return direct;
     }
 
     private static void WriteRemovalWarning(string tracePath, IReadOnlyList<EmbeddedStreamInspection> selected)
