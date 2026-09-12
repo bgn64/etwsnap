@@ -56,7 +56,7 @@ public sealed class NamedStreamStoreTests
     }
 
     [Fact]
-    public async Task ArtifactManagerRoundTripExtractsBeforeRemovingStream()
+    public async Task ArtifactManagerRoundTripExportsZipBeforeRemovingStream()
     {
         using var fixture = await NamedStreamFixture.CreateAsync();
         var providerId = Guid.NewGuid();
@@ -70,10 +70,30 @@ public sealed class NamedStreamStoreTests
             Path.Combine(sessionDirectory, "manifest.json"),
             JsonSerializer.SerializeToUtf8Bytes(new
             {
-                schemaVersion = 1,
+                schemaVersion = 2,
                 sessionId,
                 status = "Complete",
+                startedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1),
+                stoppedAtUtc = DateTimeOffset.UtcNow,
+                qpcFrequency = 10_000_000,
+                capture = new
+                {
+                    trace = true,
+                    target = new { kind = 0, handle = 0 },
+                    framesPerSecond = 30,
+                    bufferMegabytes = 500,
+                    captureCursor = true,
+                },
                 provider = new { name = "ETWSnap-Service", id = providerId },
+                trace = new
+                {
+                    instanceName = "test",
+                    supplementalProfilePath = "EtwSnap.wprp",
+                    supplementalProfileHash = "hash",
+                    userProfilePath = (string?)null,
+                    userProfileSelector = (string?)null,
+                    userProfileHash = (string?)null,
+                },
                 statistics = new
                 {
                     acceptedFrames = 1,
@@ -98,7 +118,16 @@ public sealed class NamedStreamStoreTests
                     },
                 },
             }));
-        var validated = await SessionArtifactFolder.ValidateAsync(sessionDirectory, providerId, 1, default);
+        var zipPath = Path.Combine(fixture.Root, "session.etwsnap.zip");
+        await new EmbeddedBundle().CreateAsync(
+            sessionDirectory,
+            fixture.EtlPath,
+            sessionId,
+            providerId,
+            2,
+            zipPath,
+            default);
+        var validated = await ArtifactArchive.ValidateAsync(zipPath, fixture.EtlPath, providerId, 2, default);
         var manager = new EmbeddedArtifactManager();
 
         var added = await manager.AddAsync(fixture.EtlPath, validated, default);
@@ -108,13 +137,16 @@ public sealed class NamedStreamStoreTests
         Assert.Equal(sessionId, inspected.SessionId);
         Assert.Equal(added.StreamName, inspected.Stream.Name);
 
-        var extractionRoot = Path.Combine(fixture.Root, "extracted");
-        var extraction = await manager.ExtractAsync(fixture.EtlPath, [inspected], extractionRoot, default);
+        var exportRoot = Path.Combine(fixture.Root, "exported");
+        var export = await manager.ExportAsync(fixture.EtlPath, [inspected], exportRoot, default);
 
-        Assert.Equal("trace.etl", Path.GetFileName(extraction.EtlPath));
-        Assert.Equal(fixture.PrimaryBytes, await File.ReadAllBytesAsync(extraction.EtlPath));
-        Assert.Equal(frameBytes, await File.ReadAllBytesAsync(Path.Combine(extraction.OutputDirectory, "frames", "frame_00000001.png")));
-        Assert.Empty(new NamedStreamStore().EnumerateEtwSnapStreams(extraction.EtlPath));
+        Assert.Equal(Path.GetFileName(fixture.EtlPath), Path.GetFileName(export.EtlPath));
+        Assert.Equal(fixture.PrimaryBytes, await File.ReadAllBytesAsync(export.EtlPath));
+        var exportedZip = Assert.Single(export.ArtifactZipPaths);
+        Assert.EndsWith(EmbeddedArtifactConstants.ArtifactFileExtension, exportedZip, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(await File.ReadAllBytesAsync(zipPath), await File.ReadAllBytesAsync(exportedZip));
+        Assert.Empty(new NamedStreamStore().EnumerateEtwSnapStreams(export.EtlPath));
+        Assert.False(Directory.Exists(Path.Combine(exportRoot, "frames")));
 
         manager.Remove(fixture.EtlPath, [inspected]);
 

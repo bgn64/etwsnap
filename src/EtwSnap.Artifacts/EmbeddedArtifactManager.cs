@@ -14,9 +14,9 @@ public sealed record EmbeddedArtifactAddResult(
     string StreamName,
     EmbeddedBundleInspection Bundle);
 
-public sealed record EmbeddedArtifactExtraction(
-    string OutputDirectory,
+public sealed record EmbeddedArtifactExport(
     string EtlPath,
+    IReadOnlyList<string> ArtifactZipPaths,
     IReadOnlyList<Guid> SessionIds);
 
 public sealed class EmbeddedArtifactManager
@@ -68,38 +68,28 @@ public sealed class EmbeddedArtifactManager
 
     public async Task<EmbeddedArtifactAddResult> AddAsync(
         string etlPath,
-        ValidatedSessionArtifactFolder session,
+        ValidatedArtifactArchive archive,
         CancellationToken cancellationToken)
     {
         var canonicalEtl = ValidateEtl(etlPath, forMutation: true);
-        var streamName = EmbeddedArtifactConstants.GetStreamName(session.Manifest.SessionId);
+        var sessionId = archive.Manifest.SessionId;
+        var streamName = EmbeddedArtifactConstants.GetStreamName(sessionId);
         if (_streams.Exists(canonicalEtl, streamName))
         {
-            throw new EmbeddedArtifactException($"The ETL already contains artifacts for session {session.Manifest.SessionId:N}.");
+            throw new EmbeddedArtifactException($"The ETL already contains artifacts for session {sessionId:N}.");
         }
 
         await _streams.PreflightAsync(Path.GetDirectoryName(canonicalEtl)!, cancellationToken).ConfigureAwait(false);
-        var temporaryZip = Path.Combine(
-            Path.GetDirectoryName(canonicalEtl)!,
-            $".etwsnap-{session.Manifest.SessionId:N}-{Guid.NewGuid():N}.zip.tmp");
         var streamCreated = false;
         try
         {
-            await _bundles.CreateAsync(
-                session.DirectoryPath,
-                canonicalEtl,
-                session.Manifest.SessionId,
-                session.Manifest.Provider!.Id,
-                session.Manifest.SchemaVersion,
-                temporaryZip,
-                cancellationToken).ConfigureAwait(false);
-            await _streams.WriteFromFileAsync(canonicalEtl, streamName, temporaryZip, cancellationToken).ConfigureAwait(false);
+            await _streams.WriteFromFileAsync(canonicalEtl, streamName, archive.ArchivePath, cancellationToken).ConfigureAwait(false);
             streamCreated = true;
             await using var stream = _streams.OpenRead(canonicalEtl, streamName);
             var inspection = await _bundles.InspectAsync(
                 stream,
                 canonicalEtl,
-                session.Manifest.SessionId,
+                sessionId,
                 cancellationToken).ConfigureAwait(false);
             return new EmbeddedArtifactAddResult(canonicalEtl, streamName, inspection);
         }
@@ -117,13 +107,9 @@ public sealed class EmbeddedArtifactManager
             }
             throw;
         }
-        finally
-        {
-            File.Delete(temporaryZip);
-        }
     }
 
-    public async Task<EmbeddedArtifactExtraction> ExtractAsync(
+    public async Task<EmbeddedArtifactExport> ExportAsync(
         string etlPath,
         IReadOnlyList<EmbeddedStreamInspection> selected,
         string outputRoot,
@@ -136,56 +122,81 @@ public sealed class EmbeddedArtifactManager
         }
         if (selected.Any(item => !item.IsValid))
         {
-            throw new EmbeddedArtifactException("Every selected embedded artifact stream must be valid before extraction.");
+            throw new EmbeddedArtifactException("Every selected embedded artifact stream must be valid before export.");
         }
 
         var canonicalRoot = Path.GetFullPath(outputRoot);
         Directory.CreateDirectory(canonicalRoot);
         NamedStreamStore.RejectReparsePoint(canonicalRoot);
-        var sourceName = Path.GetFileNameWithoutExtension(canonicalEtl);
-        var directoryName = selected.Count == 1
-            ? $"{sourceName}-{selected[0].SessionId!.Value:N}"
-            : $"{sourceName}-artifacts";
-        var destination = Path.Combine(canonicalRoot, directoryName);
-        if (Directory.Exists(destination) || File.Exists(destination))
+        var stem = Path.GetFileNameWithoutExtension(canonicalEtl);
+        var finalEtl = Path.Combine(canonicalRoot, stem + ".etl");
+        var zipPaths = selected.Select(item => Path.Combine(
+            canonicalRoot,
+            selected.Count == 1
+                ? EmbeddedArtifactConstants.GetArtifactFileName(stem)
+                : EmbeddedArtifactConstants.GetArtifactFileName($"{stem}.{item.SessionId!.Value:N}")))
+            .ToArray();
+        if (File.Exists(finalEtl) || zipPaths.Any(File.Exists))
         {
-            throw new EmbeddedArtifactException($"The extraction destination already exists: {destination}");
+            throw new EmbeddedArtifactException("One or more artifact export destinations already exist.");
         }
 
-        Directory.CreateDirectory(destination);
-        var marker = Path.Combine(destination, ".reserved");
-        await File.WriteAllBytesAsync(marker, [], cancellationToken).ConfigureAwait(false);
+        var temporaryEtl = finalEtl + $".{Guid.NewGuid():N}.tmp";
+        var temporaryZips = zipPaths.Select(path => path + $".{Guid.NewGuid():N}.tmp").ToArray();
+        var publishedPaths = new List<string>();
         try
         {
-            var extractedEtl = Path.Combine(
-                destination,
-                selected.Count == 1 ? "trace.etl" : Path.GetFileName(canonicalEtl));
-            await CopyPrimaryStreamAsync(canonicalEtl, extractedEtl, cancellationToken).ConfigureAwait(false);
-            foreach (var item in selected)
+            await CopyPrimaryStreamAsync(canonicalEtl, temporaryEtl, cancellationToken).ConfigureAwait(false);
+            for (var index = 0; index < selected.Count; ++index)
             {
-                var sessionRoot = selected.Count == 1
-                    ? destination
-                    : Path.Combine(destination, "sessions", item.SessionId!.Value.ToString("N"));
-                await ExtractBundleAsync(canonicalEtl, item, sessionRoot, cancellationToken).ConfigureAwait(false);
+                await using (var source = _streams.OpenRead(canonicalEtl, selected[index].Stream.Name))
+                await using (var destination = new FileStream(temporaryZips[index], FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+                    await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    destination.Flush(flushToDisk: true);
+                }
+                await using var verification = File.OpenRead(temporaryZips[index]);
+                await _bundles.InspectAsync(
+                    verification,
+                    temporaryEtl,
+                    selected[index].SessionId,
+                    cancellationToken).ConfigureAwait(false);
             }
 
-            var extractedEtlHash = await EmbeddedBundle.HashFileAsync(extractedEtl, cancellationToken).ConfigureAwait(false);
-            if (selected.Any(item => !string.Equals(
-                item.Bundle!.Descriptor.PrimaryEtlSha256,
-                extractedEtlHash,
-                StringComparison.OrdinalIgnoreCase)))
+            File.Move(temporaryEtl, finalEtl, overwrite: false);
+            publishedPaths.Add(finalEtl);
+            for (var index = 0; index < zipPaths.Length; ++index)
             {
-                throw new EmbeddedArtifactException("The extracted ETL failed primary-stream verification.");
+                File.Move(temporaryZips[index], zipPaths[index], overwrite: false);
+                publishedPaths.Add(zipPaths[index]);
             }
-            File.Delete(marker);
-            return new EmbeddedArtifactExtraction(
-                destination,
-                extractedEtl,
+            return new EmbeddedArtifactExport(
+                finalEtl,
+                zipPaths,
                 selected.Select(item => item.SessionId!.Value).ToArray());
         }
         catch
         {
+            foreach (var path in publishedPaths.AsEnumerable().Reverse())
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch
+                {
+                }
+            }
             throw;
+        }
+        finally
+        {
+            File.Delete(temporaryEtl);
+            foreach (var path in temporaryZips)
+            {
+                File.Delete(path);
+            }
         }
     }
 
@@ -195,39 +206,6 @@ public sealed class EmbeddedArtifactManager
         foreach (var item in selected)
         {
             _streams.Delete(canonicalEtl, item.Stream.Name);
-        }
-    }
-
-    private async Task ExtractBundleAsync(
-        string etlPath,
-        EmbeddedStreamInspection inspection,
-        string destination,
-        CancellationToken cancellationToken)
-    {
-        Directory.CreateDirectory(destination);
-        var descriptor = inspection.Bundle!.Descriptor;
-        var entries = descriptor.Entries
-            .OrderBy(entry => entry.Path == EmbeddedArtifactConstants.ManifestFileName ? 1 : 0)
-            .ThenBy(entry => entry.Path, StringComparer.Ordinal)
-            .ToArray();
-        foreach (var entry in entries)
-        {
-            var destinationPath = SessionArtifactFolder.ResolveContainedPath(destination, entry.Path);
-            await using var stream = _streams.OpenRead(etlPath, inspection.Stream.Name);
-            await _bundles.ExtractEntryAsync(stream, descriptor, entry.Path, destinationPath, cancellationToken).ConfigureAwait(false);
-        }
-
-        foreach (var entry in descriptor.Entries)
-        {
-            var path = SessionArtifactFolder.ResolveContainedPath(destination, entry.Path);
-            if (!File.Exists(path) || new FileInfo(path).Length != entry.Length ||
-                !string.Equals(
-                    await EmbeddedBundle.HashFileAsync(path, cancellationToken).ConfigureAwait(false),
-                    entry.Sha256,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                throw new EmbeddedArtifactException($"The extracted artifact failed verification: {entry.Path}");
-            }
         }
     }
 

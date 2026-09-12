@@ -21,7 +21,7 @@ public sealed record StartCaptureRequest(
 
 public enum ArtifactTransport
 {
-    Folder,
+    Sidecar,
     Embedded,
 }
 
@@ -34,7 +34,7 @@ public sealed record StopCaptureRequest
         ArtifactTransport = artifactTransport;
     }
 
-    public StopCaptureRequest(string outputRoot) : this(outputRoot, ArtifactTransport.Folder)
+    public StopCaptureRequest(string outputRoot) : this(outputRoot, ArtifactTransport.Sidecar)
     {
     }
 
@@ -59,75 +59,35 @@ public sealed record StopCaptureResult
     [JsonConstructor]
     public StopCaptureResult(
         Guid sessionId,
-        string? outputDirectory,
-        string? manifestPath,
+        string? artifactZipPath,
         string? tracePath,
         int exportedFrames,
         long evictedFrames,
         ArtifactTransport requestedArtifactTransport,
         ArtifactTransport actualArtifactTransport,
-        string? artifactPath,
+        string artifactSha256,
         string? artifactWarning)
     {
         SessionId = sessionId;
-        OutputDirectory = outputDirectory;
-        ManifestPath = manifestPath;
+        ArtifactZipPath = artifactZipPath;
         TracePath = tracePath;
         ExportedFrames = exportedFrames;
         EvictedFrames = evictedFrames;
         RequestedArtifactTransport = requestedArtifactTransport;
         ActualArtifactTransport = actualArtifactTransport;
-        ArtifactPath = artifactPath;
+        ArtifactSha256 = artifactSha256;
         ArtifactWarning = artifactWarning;
     }
 
-    public StopCaptureResult(
-        Guid sessionId,
-        string? outputDirectory,
-        string? manifestPath,
-        string? tracePath,
-        int exportedFrames,
-        long evictedFrames)
-        : this(
-            sessionId,
-            outputDirectory,
-            manifestPath,
-            tracePath,
-            exportedFrames,
-            evictedFrames,
-            ArtifactTransport.Folder,
-            ArtifactTransport.Folder,
-            outputDirectory,
-            null)
-    {
-    }
-
     public Guid SessionId { get; init; }
-    public string? OutputDirectory { get; init; }
-    public string? ManifestPath { get; init; }
+    public string? ArtifactZipPath { get; init; }
     public string? TracePath { get; init; }
     public int ExportedFrames { get; init; }
     public long EvictedFrames { get; init; }
     public ArtifactTransport RequestedArtifactTransport { get; init; }
     public ArtifactTransport ActualArtifactTransport { get; init; }
-    public string? ArtifactPath { get; init; }
+    public string ArtifactSha256 { get; init; }
     public string? ArtifactWarning { get; init; }
-
-    public void Deconstruct(
-        out Guid sessionId,
-        out string? outputDirectory,
-        out string? manifestPath,
-        out string? tracePath,
-        out int exportedFrames,
-        out long evictedFrames)
-    {
-        sessionId = SessionId;
-        outputDirectory = OutputDirectory;
-        manifestPath = ManifestPath;
-        tracePath = TracePath;
-        exportedFrames = ExportedFrames;
-        evictedFrames = EvictedFrames;
-    }
 }
 
 public sealed record CancelCaptureResult(Guid SessionId);

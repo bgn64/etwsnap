@@ -1,4 +1,5 @@
 using EtwSnap.Contracts;
+using EtwSnap.Contracts.Models;
 using EtwSnap.Host.Capture;
 using EtwSnap.Host.Infrastructure;
 
@@ -7,15 +8,19 @@ namespace EtwSnap.Host.Artifacts;
 internal sealed record ArtifactReferenceEvent(
     int ContractVersion,
     Guid SessionId,
-    string ArtifactDirectory,
-    string SessionDirectoryName,
-    string ManifestRelativePath,
-    string PortableManifestRelativePath,
-    int ManifestSchemaVersion);
+    string ArtifactPath,
+    string ArtifactFileName,
+    int ManifestSchemaVersion,
+    int BundleSchemaVersion,
+    ArtifactTransport RequestedTransport);
 
 internal sealed record ArtifactCommittedEvent(
     ArtifactReferenceEvent Reference,
+    string ArtifactPath,
+    string ArtifactFileName,
     string ManifestSha256,
+    string ArtifactSha256,
+    ArtifactTransport ActualTransport,
     string Status,
     ulong AcceptedFrames,
     ulong RetainedFrames,
@@ -47,11 +52,11 @@ internal sealed class NativeArtifactEventEmitter : IArtifactEventEmitter
             ApiVersion = NativeMethods.ApiVersion,
             ContractVersion = checked((uint)artifact.ContractVersion),
             ManifestSchemaVersion = checked((uint)artifact.ManifestSchemaVersion),
+            BundleSchemaVersion = checked((uint)artifact.BundleSchemaVersion),
+            RequestedTransport = checked((uint)artifact.RequestedTransport),
             SessionId = artifact.SessionId,
-            ArtifactDirectory = artifact.ArtifactDirectory,
-            SessionDirectoryName = artifact.SessionDirectoryName,
-            ManifestRelativePath = artifact.ManifestRelativePath,
-            PortableManifestRelativePath = artifact.PortableManifestRelativePath,
+            ArtifactPath = artifact.ArtifactPath,
+            ArtifactFileName = artifact.ArtifactFileName,
         };
         LogFailure(NativeMethods.EtwSnap_EmitArtifactReference(in native), "ArtifactReference");
     }
@@ -65,12 +70,14 @@ internal sealed class NativeArtifactEventEmitter : IArtifactEventEmitter
             ApiVersion = NativeMethods.ApiVersion,
             ContractVersion = checked((uint)reference.ContractVersion),
             ManifestSchemaVersion = checked((uint)reference.ManifestSchemaVersion),
+            BundleSchemaVersion = checked((uint)reference.BundleSchemaVersion),
+            RequestedTransport = checked((uint)reference.RequestedTransport),
+            ActualTransport = checked((uint)artifact.ActualTransport),
             SessionId = reference.SessionId,
-            ArtifactDirectory = reference.ArtifactDirectory,
-            SessionDirectoryName = reference.SessionDirectoryName,
-            ManifestRelativePath = reference.ManifestRelativePath,
-            PortableManifestRelativePath = reference.PortableManifestRelativePath,
+            ArtifactPath = artifact.ArtifactPath,
+            ArtifactFileName = artifact.ArtifactFileName,
             ManifestSha256 = artifact.ManifestSha256,
+            ArtifactSha256 = artifact.ArtifactSha256,
             Status = artifact.Status,
             AcceptedFrames = artifact.AcceptedFrames,
             RetainedFrames = artifact.RetainedFrames,
@@ -94,28 +101,35 @@ internal sealed class NativeArtifactEventEmitter : IArtifactEventEmitter
 
 internal static class ArtifactEvents
 {
-    public static ArtifactReferenceEvent CreateReference(Guid sessionId, ArtifactReservation reservation)
-        => CreateReference(sessionId, reservation.DirectoryPath);
-
-    public static ArtifactReferenceEvent CreateReference(Guid sessionId, string artifactDirectory)
+    public static ArtifactReferenceEvent CreateReference(
+        Guid sessionId,
+        string artifactPath,
+        string artifactFileName,
+        ArtifactTransport requestedTransport)
     {
-        var sessionDirectoryName = Path.GetFileName(artifactDirectory);
         return new ArtifactReferenceEvent(
             EtwSnapConstants.ArtifactContractVersion,
             sessionId,
-            artifactDirectory,
-            sessionDirectoryName,
-            EtwSnapConstants.ManifestFileName,
-            $"sessions/{sessionId:N}/{EtwSnapConstants.ManifestFileName}",
-            EtwSnapConstants.ManifestSchemaVersion);
+            artifactPath,
+            artifactFileName,
+            EtwSnapConstants.ManifestSchemaVersion,
+            EtwSnap.Artifacts.EmbeddedArtifactConstants.BundleSchemaVersion,
+            requestedTransport);
     }
 
     public static ArtifactCommittedEvent CreateCommitted(
         ArtifactReferenceEvent reference,
         ArtifactWriteResult result,
+        ArtifactPublication publication,
         NativeCaptureStats stats) => new(
             reference,
+            publication.Transport == ArtifactTransport.Embedded
+                ? $"{publication.TracePath}:{EtwSnap.Artifacts.EmbeddedArtifactConstants.GetStreamName(reference.SessionId)}"
+                : publication.ArtifactZipPath!,
+            reference.ArtifactFileName,
             result.ManifestSha256,
+            publication.ArtifactSha256,
+            publication.Transport,
             result.Status,
             stats.AcceptedFrames,
             stats.RetainedFrames,

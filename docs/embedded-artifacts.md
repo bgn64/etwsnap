@@ -1,95 +1,83 @@
-# Embedded ETWSnap Artifacts
+# ETWSnap Artifact ZIPs
 
-Embedded artifacts are an opt-in convenience for keeping an ETWSnap trace and its screenshots together. ETWSnap attaches a standard ZIP bundle to an unchanged ETL by using an NTFS named stream. The ETL primary stream remains readable by WPR, WPA, XPerf, and other ETL consumers.
+Every screen-capture session produces one canonical `.etwsnap.zip` payload. The payload is either a normal sidecar file or is copied byte-for-byte into one NTFS named stream on an ETL. An artifact ZIP never contains an ETL.
 
-## Capture and fallback
+## Output modes
 
-Start a traced session and request embedded output when stopping:
+Screenshot-only capture:
+
+```text
+etwsnap-<start-UTC>-<id8>.etwsnap.zip
+```
+
+Traced capture:
+
+```text
+etwsnap-<start-UTC>-<id8>.etl
+etwsnap-<start-UTC>-<id8>.etwsnap.zip
+```
+
+Embedded traced capture:
 
 ```powershell
 etwsnap start --trace
 etwsnap stop D:\Captures --embed-artifacts
 ```
 
-Successful output resembles:
+Successful embedded output leaves only the `.etl`. Its stream is named `EtwSnap.Session.<full-session-id-without-hyphens>` and contains the same ZIP bytes that sidecar mode would publish. If stream preflight, attachment, verification, or publication fails, ETWSnap publishes the ETL and `.etwsnap.zip` sidecar pair and prints a warning.
+
+## ZIP layout
 
 ```text
-D:\Captures\etwsnap-20260904T142530Z-a1b2c3d4.etl
+bundle.json
+manifest.json
+frames/*.png
+EtwSnap.wprp       # when tracing was requested
 ```
 
-The stream name is `EtwSnap.Session.<full-session-id-without-hyphens>`. ETWSnap stages the trace and screenshots on the output volume, verifies the bundle before and after attaching it, and publishes the ETL by a same-volume rename.
+`bundle.json` records schema version 2, full session and provider IDs, manifest schema and SHA-256, an optional ETL primary-stream SHA-256, and the path, length, and SHA-256 of every entry. Traced ZIPs require an exact ETL hash match. Screenshot-only ZIPs have no ETL hash.
 
-`--embed-artifacts` requires a session started with `--trace`. Folder output remains the default. If stream preflight, packaging, attachment, verification, or publication fails, ETWSnap removes any partial stream, publishes the canonical session folder, and prints a warning. A destination failure before capture stops leaves recording active for retry.
-
-## Portability
-
-NTFS named streams are Windows filesystem metadata. Many copy programs, ZIP tools, cloud-sync clients, email systems, network filesystems, and upload services preserve only the ETL primary stream. The resulting ETL may still open normally while its screenshots are gone.
-
-Run this after every transfer where artifact preservation matters:
-
-```powershell
-etwsnap artifacts inspect .\trace.etl
-```
-
-To create portable ordinary files before transfer:
-
-```powershell
-etwsnap artifacts remove .\trace.etl --output-root .\portable
-```
-
-This verifies all selected bundles, extracts them, verifies the complete output, and only then removes their streams from the source ETL.
+Readers reject rooted or traversing paths, duplicate or unindexed entries, oversized entries, excessive expanded size, and every hash or length mismatch. PNG entries are stored without additional ZIP compression because PNG is already compressed.
 
 ## Artifact commands
 
-Inspect every ETWSnap stream and fully verify its bundle:
+Inspect a sidecar ZIP or all embedded streams in an ETL:
 
 ```powershell
+etwsnap artifacts inspect <artifact.etwsnap.zip>
 etwsnap artifacts inspect <trace.etl>
 ```
 
-No streams is a successful `none` result. Any invalid ETWSnap stream returns an operation failure and includes its reason.
-
-Attach a completed traditional session folder to a matching ETL:
+Attach a canonical ZIP to a matching ETL:
 
 ```powershell
-etwsnap artifacts add <trace.etl> <session-folder>
+etwsnap artifacts add <trace.etl> <artifact.etwsnap.zip>
 ```
 
-The command validates the folder manifest, provider, frames, and matching session events in the target ETL. It never changes or deletes the source folder and never overwrites an existing session stream.
+The command validates provider/session identity and every frame against the target ETL. A traced ZIP must also match the ETL SHA-256. The ZIP is not modified or deleted, and an existing session stream is never overwritten.
 
-Extract selected artifacts and then remove their streams:
+Export selected embedded streams before removing them:
 
 ```powershell
 etwsnap artifacts remove <trace.etl> --output-root <directory>
 etwsnap artifacts remove <trace.etl> --session <id> --output-root <directory>
 ```
 
-One selected session produces a traditional session folder containing a primary-stream-only ETL, manifest, frames, and profile. Multiple sessions produce one ETL plus `sessions/<full-id>/...` directories. Existing destinations are not overwritten. If any selected stream is invalid or extraction fails, no stream is removed.
+The output is a primary-stream-only ETL plus canonical sidecar ZIPs. One selected session produces `<etl-stem>.etwsnap.zip`; multiple sessions produce `<etl-stem>.<full-session-id>.etwsnap.zip`. ETWSnap verifies every output before deleting any selected stream.
 
-Discard artifacts without extraction:
+Discard without export:
 
 ```powershell
 etwsnap artifacts remove <trace.etl>
 etwsnap artifacts remove <trace.etl> --session <id>
 ```
 
-The interactive prompt lists every selected session, validity, frame count when known, and stream size. It defaults to No. Redirected or non-interactive input requires `--force`. The force option bypasses only confirmation; it does not weaken path or session selection.
+The prompt defaults to No. Redirected or non-interactive input requires `--force`.
 
-## Bundle contract v1
+## Portability
 
-Each session stream contains an ordinary ZIP archive with:
-
-```text
-bundle.json
-manifest.json
-frames/*.png
-EtwSnap.wprp       # when available
-```
-
-`bundle.json` records schema version 1, full session and provider IDs, source manifest schema and SHA-256, ETL primary-stream SHA-256, and the path, length, and SHA-256 of every archive entry. Entry names are relative `/`-separated paths. Readers reject roots, drive or stream syntax, empty or traversal segments, duplicates, unindexed entries, oversized entries, excessive expanded size, and all hash or length mismatches.
-
-The ETL hash binds artifacts to the exact primary stream. The manifest hash remains independently comparable with ETWSnap's `ArtifactCommitted` event when an external ETW session records that event.
+Named streams may be lost through ordinary copies, ZIP tools, cloud synchronization, email, or non-NTFS filesystems. Use `artifacts remove --output-root` before transfer when portability matters, or run `artifacts inspect` after transfer.
 
 ## WPA
 
-The ETWSnap WPA plugin checks the exact session stream before folder candidates. During trace loading it materializes all verified PNGs into `%LOCALAPPDATA%\EtwSnap\WpaCache`, using temporary files, length and hash verification, and atomic rename. Image Path values therefore point to normal files, and default image viewers can navigate between adjacent frames. Cache files are revalidated and may be deleted at any time.
+WPA checks the exact embedded stream first and then canonical sibling ZIP names. It can also open a `.etwsnap.zip` directly, including screenshot-only archives. During load it extracts verified PNGs into `%LOCALAPPDATA%\EtwSnap\WpaCache`, allowing ordinary image paths and next/previous navigation in the default image viewer. Cache files are disposable and revalidated before reuse.

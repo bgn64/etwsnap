@@ -2,7 +2,8 @@ namespace EtwSnap.Artifacts;
 
 public static class EmbeddedArtifactConstants
 {
-    public const int BundleSchemaVersion = 1;
+    public const int BundleSchemaVersion = 2;
+    public const string ArtifactFileExtension = ".etwsnap.zip";
     public const string StreamPrefix = "EtwSnap.Session.";
     public const string DescriptorFileName = "bundle.json";
     public const string ManifestFileName = "manifest.json";
@@ -13,6 +14,8 @@ public static class EmbeddedArtifactConstants
     public const long MaximumExpandedBytes = 16L * 1024 * 1024 * 1024;
 
     public static string GetStreamName(Guid sessionId) => $"{StreamPrefix}{sessionId:N}";
+
+    public static string GetArtifactFileName(string baseName) => baseName + ArtifactFileExtension;
 
     public static bool TryParseStreamName(string streamName, out Guid sessionId)
     {

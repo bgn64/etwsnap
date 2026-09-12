@@ -16,6 +16,7 @@ internal sealed record RecoveryArtifactState(
     ArtifactTransport? ActualTransport,
     string? StagingDirectory,
     string? FinalEtlPath,
+    string? FinalZipPath,
     string? StreamName);
 
 internal sealed class RecoveryStore : IRecoveryStore
@@ -95,7 +96,7 @@ internal sealed class RecoveryStore : IRecoveryStore
                         if (record is null ||
                                 record.Status is not ("Starting" or "Capturing" or "Stopping" or "Persisting") &&
                                 !(record.Status == "Failed" &&
-                                    record.Artifacts?.RequestedTransport == ArtifactTransport.Embedded &&
+                                    record.Artifacts is not null &&
                                     Directory.Exists(record.Artifacts.StagingDirectory)))
             {
                 continue;
@@ -125,12 +126,39 @@ internal sealed class RecoveryStore : IRecoveryStore
         CancellationToken cancellationToken)
     {
         var artifacts = record.Artifacts;
-        if (artifacts?.RequestedTransport != ArtifactTransport.Embedded)
+        if (artifacts is null)
         {
             return record with { Status = "HostTerminated", Error = cleanupError };
         }
 
         string? recoveryError = null;
+        if (!string.IsNullOrWhiteSpace(artifacts.FinalZipPath) && File.Exists(artifacts.FinalZipPath))
+        {
+            try
+            {
+                var finalEtl = !string.IsNullOrWhiteSpace(artifacts.FinalEtlPath) && File.Exists(artifacts.FinalEtlPath)
+                    ? artifacts.FinalEtlPath
+                    : null;
+                await using var archive = File.OpenRead(artifacts.FinalZipPath);
+                await new EtwSnap.Artifacts.EmbeddedBundle().InspectAsync(
+                    archive,
+                    finalEtl,
+                    record.SessionId,
+                    cancellationToken).ConfigureAwait(false);
+                return record with
+                {
+                    Status = cleanupError is null ? "Complete" : "Partial",
+                    OutputDirectory = artifacts.FinalZipPath,
+                    Error = cleanupError,
+                    Artifacts = artifacts with { ActualTransport = ArtifactTransport.Sidecar },
+                };
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or ArgumentException or OverflowException or JsonException)
+            {
+                recoveryError = $"The published sidecar artifact ZIP could not be verified and was left unchanged: {exception.Message}";
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(artifacts.FinalEtlPath) &&
             !string.IsNullOrWhiteSpace(artifacts.StreamName) &&
             File.Exists(artifacts.FinalEtlPath))
@@ -162,34 +190,65 @@ internal sealed class RecoveryStore : IRecoveryStore
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(artifacts.FinalEtlPath))
+                if (string.IsNullOrWhiteSpace(artifacts.FinalZipPath))
                 {
-                    throw new IOException("The recovery record does not contain a final ETL path.");
+                    throw new IOException("The recovery record does not contain a final artifact ZIP path.");
                 }
-                var fallbackDirectory = Path.ChangeExtension(artifacts.FinalEtlPath, null)
-                    ?? throw new IOException("The recovery fallback path is invalid.");
-                if (Directory.Exists(fallbackDirectory) || File.Exists(fallbackDirectory))
+                if (File.Exists(artifacts.FinalZipPath))
                 {
-                    throw new IOException($"The recovery fallback destination already exists: {fallbackDirectory}");
+                    throw new IOException($"The recovery artifact ZIP already exists: {artifacts.FinalZipPath}");
                 }
 
                 var tracePath = Path.Combine(artifacts.StagingDirectory, "trace.etl");
-                await SanitizePrimaryStreamAsync(tracePath, cancellationToken).ConfigureAwait(false);
-                File.Delete(Path.Combine(artifacts.StagingDirectory, ".bundle.zip.tmp"));
-                File.Delete(Path.Combine(artifacts.StagingDirectory, ".reserved"));
-                Directory.Move(artifacts.StagingDirectory, fallbackDirectory);
+                var existingTracePath = File.Exists(tracePath)
+                    ? tracePath
+                    : !string.IsNullOrWhiteSpace(artifacts.FinalEtlPath) && File.Exists(artifacts.FinalEtlPath)
+                        ? artifacts.FinalEtlPath
+                        : null;
+                if (existingTracePath is not null)
+                {
+                    await SanitizePrimaryStreamAsync(existingTracePath, cancellationToken).ConfigureAwait(false);
+                }
+                var recoveryZip = Path.Combine(artifacts.StagingDirectory, ".recovery.etwsnap.zip.tmp");
+                var traceForBundle = existingTracePath;
+                await new EtwSnap.Artifacts.EmbeddedBundle().CreateAsync(
+                    artifacts.StagingDirectory,
+                    traceForBundle,
+                    record.SessionId,
+                    EtwSnap.Contracts.EtwSnapConstants.ProviderId,
+                    EtwSnap.Contracts.EtwSnapConstants.ManifestSchemaVersion,
+                    recoveryZip,
+                    cancellationToken).ConfigureAwait(false);
+                string? finalEtl = !string.IsNullOrWhiteSpace(artifacts.FinalEtlPath) && File.Exists(artifacts.FinalEtlPath)
+                    ? artifacts.FinalEtlPath
+                    : null;
+                if (File.Exists(tracePath) && !string.IsNullOrWhiteSpace(artifacts.FinalEtlPath) && finalEtl is null)
+                {
+                    File.Move(tracePath, artifacts.FinalEtlPath, overwrite: false);
+                    finalEtl = artifacts.FinalEtlPath;
+                }
+                File.Move(recoveryZip, artifacts.FinalZipPath, overwrite: false);
+                await using (var archive = File.OpenRead(artifacts.FinalZipPath))
+                {
+                    await new EtwSnap.Artifacts.EmbeddedBundle().InspectAsync(
+                        archive,
+                        finalEtl,
+                        record.SessionId,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                Directory.Delete(artifacts.StagingDirectory, recursive: true);
                 var warning = CombineErrors(
                     cleanupError,
                     recoveryError,
-                    "Recovered abandoned embedded staging as a normal session folder.");
+                    "Recovered abandoned staging as a sidecar artifact ZIP.");
                 return record with
                 {
                     Status = "Partial",
-                    OutputDirectory = fallbackDirectory,
+                    OutputDirectory = artifacts.FinalZipPath,
                     Error = warning,
                     Artifacts = artifacts with
                     {
-                        ActualTransport = ArtifactTransport.Folder,
+                        ActualTransport = ArtifactTransport.Sidecar,
                         StagingDirectory = null,
                     },
                 };

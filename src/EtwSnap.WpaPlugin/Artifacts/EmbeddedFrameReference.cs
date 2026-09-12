@@ -3,11 +3,12 @@ using System.Collections.Concurrent;
 namespace EtwSnap.WpaPlugin.Artifacts;
 
 internal sealed record EmbeddedFrameReference(
-    string EtlPath,
-    string StreamName,
+    string ArchivePath,
+    string? StreamName,
     Guid SessionId,
     string EntryPath,
-    EtwSnap.Artifacts.EmbeddedBundleDescriptor Descriptor)
+    EtwSnap.Artifacts.EmbeddedBundleDescriptor Descriptor,
+    string CacheSourceHash)
 {
     public string Materialize() => EmbeddedFrameMaterializer.Materialize(this);
 }
@@ -31,7 +32,7 @@ internal static class EmbeddedFrameMaterializer
             "WpaCache");
         var destination = Path.Combine(
             cacheRoot,
-            reference.Descriptor.PrimaryEtlSha256,
+            reference.CacheSourceHash,
             reference.SessionId.ToString("N"),
             reference.EntryPath.Replace('/', Path.DirectorySeparatorChar));
         EnsureCachePath(cacheRoot, destination);
@@ -48,7 +49,9 @@ internal static class EmbeddedFrameMaterializer
             {
                 File.Delete(destination);
             }
-            using var stream = new EtwSnap.Artifacts.NamedStreamStore().OpenRead(reference.EtlPath, reference.StreamName);
+            using var stream = reference.StreamName is null
+                ? File.OpenRead(reference.ArchivePath)
+                : new EtwSnap.Artifacts.NamedStreamStore().OpenRead(reference.ArchivePath, reference.StreamName);
             new EtwSnap.Artifacts.EmbeddedBundle().ExtractEntryAsync(
                 stream,
                 reference.Descriptor,
