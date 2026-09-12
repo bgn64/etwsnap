@@ -5,8 +5,8 @@ namespace EtwSnap.WpaPlugin;
 [ProcessingSource(
     "{D8B705BC-7A8A-4E34-83A0-9DDCAC4756C8}",
     "ETWSnap Artifact ZIP",
-    "ETWSnap screenshot artifacts without an ETL")]
-[FileDataSource(".zip", "ETWSnap artifact ZIP files")]
+    "ETWSnap screenshot sessions from .etwsnap.zip artifacts")]
+[FileDataSource(".zip", "ETWSnap artifact ZIPs")]
 public sealed class EtwSnapArtifactProcessingSource : ProcessingSource
 {
     protected override bool IsDataSourceSupportedCore(IDataSource dataSource) =>

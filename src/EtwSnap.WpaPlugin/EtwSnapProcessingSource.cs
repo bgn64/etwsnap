@@ -5,8 +5,8 @@ namespace EtwSnap.WpaPlugin;
 [ProcessingSource(
     "{4E070D12-F361-4F68-8E54-1B5D78E25D09}",
     "ETWSnap",
-    "ETWSnap screenshot and recording events")]
-[FileDataSource(".etl", "ETW trace files")]
+    "ETWSnap screenshot sessions correlated with ETW timeline events")]
+[FileDataSource(".etl", "ETWSnap ETL traces")]
 public sealed class EtwSnapProcessingSource : ProcessingSource
 {
     protected override bool IsDataSourceSupportedCore(IDataSource dataSource) =>
