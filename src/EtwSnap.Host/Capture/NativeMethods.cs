@@ -5,7 +5,7 @@ namespace EtwSnap.Host.Capture;
 
 internal static class NativeMethods
 {
-    internal const uint ApiVersion = 2;
+    internal const uint ApiVersion = 3;
     private const string LibraryName = "EtwSnap.Native.dll";
 
     internal enum Result : int
@@ -67,11 +67,11 @@ internal static class NativeMethods
         internal uint ApiVersion;
         internal uint ContractVersion;
         internal uint ManifestSchemaVersion;
+        internal uint BundleSchemaVersion;
+        internal uint RequestedTransport;
         internal Guid SessionId;
-        [MarshalAs(UnmanagedType.LPWStr)] internal string ArtifactDirectory;
-        [MarshalAs(UnmanagedType.LPWStr)] internal string SessionDirectoryName;
-        [MarshalAs(UnmanagedType.LPWStr)] internal string ManifestRelativePath;
-        [MarshalAs(UnmanagedType.LPWStr)] internal string PortableManifestRelativePath;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string ArtifactPath;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string ArtifactFileName;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -81,12 +81,14 @@ internal static class NativeMethods
         internal uint ApiVersion;
         internal uint ContractVersion;
         internal uint ManifestSchemaVersion;
+        internal uint BundleSchemaVersion;
+        internal uint RequestedTransport;
+        internal uint ActualTransport;
         internal Guid SessionId;
-        [MarshalAs(UnmanagedType.LPWStr)] internal string ArtifactDirectory;
-        [MarshalAs(UnmanagedType.LPWStr)] internal string SessionDirectoryName;
-        [MarshalAs(UnmanagedType.LPWStr)] internal string ManifestRelativePath;
-        [MarshalAs(UnmanagedType.LPWStr)] internal string PortableManifestRelativePath;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string ArtifactPath;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string ArtifactFileName;
         [MarshalAs(UnmanagedType.LPWStr)] internal string ManifestSha256;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string ArtifactSha256;
         [MarshalAs(UnmanagedType.LPWStr)] internal string Status;
         internal ulong AcceptedFrames;
         internal ulong RetainedFrames;

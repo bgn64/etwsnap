@@ -1,18 +1,19 @@
+using EtwSnap.Artifacts;
 using EtwSnap.Contracts.Models;
 
 namespace EtwSnap.Host.Artifacts;
 
 internal sealed record EmbeddedArtifactReservation(
     ArtifactReservation Staging,
-    string FinalEtlPath,
-    string FallbackDirectoryPath);
+    string? FinalEtlPath,
+    string FinalZipPath,
+    string? Warning);
 
 internal sealed record ArtifactPublication(
     ArtifactTransport Transport,
-    string? OutputDirectory,
-    string? ManifestPath,
+    string? ArtifactZipPath,
     string? TracePath,
-    string ArtifactPath,
+    string ArtifactSha256,
     string? Warning);
 
 internal interface IEmbeddedArtifactPublisher
@@ -21,43 +22,51 @@ internal interface IEmbeddedArtifactPublisher
         string outputRoot,
         Guid sessionId,
         DateTimeOffset startedAtUtc,
+        ArtifactTransport transport,
+        bool tracing,
         CancellationToken cancellationToken);
 
     Task<ArtifactPublication> PublishAsync(
         EmbeddedArtifactReservation reservation,
         SessionMetadata session,
-        string? fallbackReason,
+        ArtifactTransport requestedTransport,
+        string? traceFailure,
         CancellationToken cancellationToken);
 }
 
 internal sealed class EmbeddedArtifactPublisher : IEmbeddedArtifactPublisher
 {
-    private readonly EtwSnap.Artifacts.NamedStreamStore _streams = new();
-    private readonly EtwSnap.Artifacts.EmbeddedBundle _bundles = new();
+    private readonly NamedStreamStore _streams = new();
+    private readonly EmbeddedBundle _bundles = new();
 
     public async Task<EmbeddedArtifactReservation> ReserveAsync(
         string outputRoot,
         Guid sessionId,
         DateTimeOffset startedAtUtc,
+        ArtifactTransport transport,
+        bool tracing,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRoot);
         var root = Path.GetFullPath(outputRoot);
         Directory.CreateDirectory(root);
-        EtwSnap.Artifacts.NamedStreamStore.RejectReparsePoint(root);
-        await _streams.PreflightAsync(root, cancellationToken).ConfigureAwait(false);
+        NamedStreamStore.RejectReparsePoint(root);
+        if (transport == ArtifactTransport.Embedded)
+        {
+            await _streams.PreflightAsync(root, cancellationToken).ConfigureAwait(false);
+        }
 
         var name = SessionArtifactWriter.GetDirectoryName(sessionId, startedAtUtc);
         var stagingRoot = Path.Combine(root, ".etwsnap-staging");
         Directory.CreateDirectory(stagingRoot);
-        EtwSnap.Artifacts.NamedStreamStore.RejectReparsePoint(stagingRoot);
+        NamedStreamStore.RejectReparsePoint(stagingRoot);
         var stagingDirectory = Path.Combine(stagingRoot, name);
-        var fallbackDirectory = Path.Combine(root, name);
-        var finalEtl = Path.Combine(root, name + ".etl");
-        if (Directory.Exists(stagingDirectory) || Directory.Exists(fallbackDirectory) ||
-            File.Exists(stagingDirectory) || File.Exists(fallbackDirectory) || File.Exists(finalEtl))
+        var finalEtl = tracing ? Path.Combine(root, name + ".etl") : null;
+        var finalZip = Path.Combine(root, EmbeddedArtifactConstants.GetArtifactFileName(name));
+        if (Directory.Exists(stagingDirectory) || File.Exists(stagingDirectory) ||
+            File.Exists(finalZip) || finalEtl is not null && File.Exists(finalEtl))
         {
-            throw new IOException($"The embedded session output already exists for {name}.");
+            throw new IOException($"The session output already exists for {name}.");
         }
 
         Directory.CreateDirectory(stagingDirectory);
@@ -73,62 +82,114 @@ internal sealed class EmbeddedArtifactPublisher : IEmbeddedArtifactPublisher
             marker,
             null,
             DeferFinalization: true);
-        return new EmbeddedArtifactReservation(staging, finalEtl, fallbackDirectory);
+        return new EmbeddedArtifactReservation(staging, finalEtl, finalZip, null);
     }
 
     public async Task<ArtifactPublication> PublishAsync(
         EmbeddedArtifactReservation reservation,
         SessionMetadata session,
-        string? fallbackReason,
+        ArtifactTransport requestedTransport,
+        string? traceFailure,
         CancellationToken cancellationToken)
     {
-        var bundlePath = Path.Combine(reservation.Staging.DirectoryPath, ".bundle.zip.tmp");
-        try
+        if (traceFailure is not null && File.Exists(reservation.Staging.TracePath))
         {
-            if (fallbackReason is not null)
-            {
-                throw new IOException(fallbackReason);
-            }
-            if (!File.Exists(reservation.Staging.TracePath))
-            {
-                throw new IOException("WPR did not produce a trace to receive embedded artifacts.");
-            }
-
-            await _bundles.CreateAsync(
-                reservation.Staging.DirectoryPath,
-                reservation.Staging.TracePath,
-                session.SessionId,
-                EtwSnap.Contracts.EtwSnapConstants.ProviderId,
-                EtwSnap.Contracts.EtwSnapConstants.ManifestSchemaVersion,
-                bundlePath,
-                cancellationToken).ConfigureAwait(false);
-            var streamName = EtwSnap.Artifacts.EmbeddedArtifactConstants.GetStreamName(session.SessionId);
-            await _streams.WriteFromFileAsync(
-                reservation.Staging.TracePath,
-                streamName,
-                bundlePath,
-                cancellationToken).ConfigureAwait(false);
-            await VerifyAsync(reservation.Staging.TracePath, streamName, session.SessionId, cancellationToken).ConfigureAwait(false);
-
-            File.Move(reservation.Staging.TracePath, reservation.FinalEtlPath, overwrite: false);
-            await VerifyAsync(reservation.FinalEtlPath, streamName, session.SessionId, cancellationToken).ConfigureAwait(false);
-            Directory.Delete(reservation.Staging.DirectoryPath, recursive: true);
-            TryDeleteEmptyStagingRoot(Path.GetDirectoryName(reservation.Staging.DirectoryPath)!);
-            return new ArtifactPublication(
-                ArtifactTransport.Embedded,
-                null,
-                null,
-                reservation.FinalEtlPath,
-                reservation.FinalEtlPath,
-                null);
+            File.Delete(reservation.Staging.TracePath);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or ArgumentException)
+        var tracePath = File.Exists(reservation.Staging.TracePath) ? reservation.Staging.TracePath : null;
+        var bundlePath = Path.Combine(reservation.Staging.DirectoryPath, ".artifact.etwsnap.zip.tmp");
+        await _bundles.CreateAsync(
+            reservation.Staging.DirectoryPath,
+            tracePath,
+            session.SessionId,
+            EtwSnap.Contracts.EtwSnapConstants.ProviderId,
+            EtwSnap.Contracts.EtwSnapConstants.ManifestSchemaVersion,
+            bundlePath,
+            cancellationToken).ConfigureAwait(false);
+        await VerifyArchiveAsync(bundlePath, tracePath, session.SessionId, cancellationToken).ConfigureAwait(false);
+        var artifactSha256 = await EmbeddedBundle.HashFileAsync(bundlePath, cancellationToken).ConfigureAwait(false);
+
+        if (requestedTransport == ArtifactTransport.Embedded && tracePath is not null && traceFailure is null)
         {
-            return await PublishFallbackAsync(reservation, bundlePath, exception, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await PublishEmbeddedAsync(
+                    reservation,
+                    bundlePath,
+                    artifactSha256,
+                    session.SessionId,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or ArgumentException)
+            {
+                await SanitizeTraceAsync(reservation, cancellationToken).ConfigureAwait(false);
+                var warning = $"Embedded artifact publication failed; saved a sidecar artifact ZIP instead. {exception.Message}";
+                return await PublishSidecarAsync(
+                    reservation,
+                    bundlePath,
+                    artifactSha256,
+                    session.SessionId,
+                    warning,
+                    cancellationToken).ConfigureAwait(false);
+            }
         }
+
+        var fallbackWarning = traceFailure is null
+            ? reservation.Warning
+            : $"Trace stop failed; saved the screenshot artifact ZIP without an ETL. {traceFailure}";
+        return await PublishSidecarAsync(
+            reservation,
+            bundlePath,
+            artifactSha256,
+            session.SessionId,
+            fallbackWarning,
+            cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task VerifyAsync(
+    private async Task<ArtifactPublication> PublishEmbeddedAsync(
+        EmbeddedArtifactReservation reservation,
+        string bundlePath,
+        string artifactSha256,
+        Guid sessionId,
+        CancellationToken cancellationToken)
+    {
+        if (reservation.FinalEtlPath is null)
+        {
+            throw new InvalidOperationException("Embedded publication requires a traced session.");
+        }
+        var streamName = EmbeddedArtifactConstants.GetStreamName(sessionId);
+        await _streams.WriteFromFileAsync(reservation.Staging.TracePath, streamName, bundlePath, cancellationToken).ConfigureAwait(false);
+        await VerifyStreamAsync(reservation.Staging.TracePath, streamName, sessionId, cancellationToken).ConfigureAwait(false);
+        File.Move(reservation.Staging.TracePath, reservation.FinalEtlPath, overwrite: false);
+        await VerifyStreamAsync(reservation.FinalEtlPath, streamName, sessionId, cancellationToken).ConfigureAwait(false);
+        File.Delete(bundlePath);
+        TryDeleteStagingDirectory(reservation.Staging.DirectoryPath);
+        TryDeleteEmptyStagingRoot(Path.GetDirectoryName(reservation.Staging.DirectoryPath)!);
+        return new ArtifactPublication(ArtifactTransport.Embedded, null, reservation.FinalEtlPath, artifactSha256, null);
+    }
+
+    private async Task<ArtifactPublication> PublishSidecarAsync(
+        EmbeddedArtifactReservation reservation,
+        string bundlePath,
+        string artifactSha256,
+        Guid sessionId,
+        string? warning,
+        CancellationToken cancellationToken)
+    {
+        string? finalEtl = null;
+        if (File.Exists(reservation.Staging.TracePath) && reservation.FinalEtlPath is not null)
+        {
+            File.Move(reservation.Staging.TracePath, reservation.FinalEtlPath, overwrite: false);
+            finalEtl = reservation.FinalEtlPath;
+        }
+        File.Move(bundlePath, reservation.FinalZipPath, overwrite: false);
+        await VerifyArchiveAsync(reservation.FinalZipPath, finalEtl, sessionId, cancellationToken).ConfigureAwait(false);
+        TryDeleteStagingDirectory(reservation.Staging.DirectoryPath);
+        TryDeleteEmptyStagingRoot(Path.GetDirectoryName(reservation.Staging.DirectoryPath)!);
+        return new ArtifactPublication(ArtifactTransport.Sidecar, reservation.FinalZipPath, finalEtl, artifactSha256, warning);
+    }
+
+    private async Task VerifyStreamAsync(
         string etlPath,
         string streamName,
         Guid sessionId,
@@ -138,40 +199,34 @@ internal sealed class EmbeddedArtifactPublisher : IEmbeddedArtifactPublisher
         await _bundles.InspectAsync(stream, etlPath, sessionId, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<ArtifactPublication> PublishFallbackAsync(
-        EmbeddedArtifactReservation reservation,
-        string bundlePath,
-        Exception cause,
+    private async Task VerifyArchiveAsync(
+        string archivePath,
+        string? etlPath,
+        Guid? sessionId,
         CancellationToken cancellationToken)
     {
-        File.Delete(bundlePath);
-        var traceSource = File.Exists(reservation.FinalEtlPath)
-            ? reservation.FinalEtlPath
-            : File.Exists(reservation.Staging.TracePath) ? reservation.Staging.TracePath : null;
-        if (traceSource is not null)
-        {
-            var cleanTrace = Path.Combine(reservation.Staging.DirectoryPath, $".trace-{Guid.NewGuid():N}.tmp");
-            await CopyPrimaryStreamAsync(traceSource, cleanTrace, cancellationToken).ConfigureAwait(false);
-            File.Move(cleanTrace, reservation.Staging.TracePath, overwrite: true);
-            if (File.Exists(reservation.FinalEtlPath))
-            {
-                File.Delete(reservation.FinalEtlPath);
-            }
-        }
+        await using var stream = File.OpenRead(archivePath);
+        await _bundles.InspectAsync(stream, etlPath, sessionId, cancellationToken).ConfigureAwait(false);
+    }
 
-        File.Delete(reservation.Staging.ReservationMarker);
-        Directory.Move(reservation.Staging.DirectoryPath, reservation.FallbackDirectoryPath);
-        TryDeleteEmptyStagingRoot(Path.GetDirectoryName(reservation.Staging.DirectoryPath)!);
-        var tracePath = Path.Combine(reservation.FallbackDirectoryPath, Path.GetFileName(reservation.Staging.TracePath));
-        var manifestPath = Path.Combine(reservation.FallbackDirectoryPath, Path.GetFileName(reservation.Staging.ManifestPath));
-        var warning = $"Embedded artifact publication failed; saved a normal session folder instead. {cause.Message}";
-        return new ArtifactPublication(
-            ArtifactTransport.Folder,
-            reservation.FallbackDirectoryPath,
-            manifestPath,
-            File.Exists(tracePath) ? tracePath : null,
-            reservation.FallbackDirectoryPath,
-            warning);
+    private static async Task SanitizeTraceAsync(
+        EmbeddedArtifactReservation reservation,
+        CancellationToken cancellationToken)
+    {
+        var sourcePath = reservation.FinalEtlPath is not null && File.Exists(reservation.FinalEtlPath)
+            ? reservation.FinalEtlPath
+            : reservation.Staging.TracePath;
+        if (!File.Exists(sourcePath))
+        {
+            return;
+        }
+        var cleanTrace = Path.Combine(reservation.Staging.DirectoryPath, $".trace-{Guid.NewGuid():N}.tmp");
+        await CopyPrimaryStreamAsync(sourcePath, cleanTrace, cancellationToken).ConfigureAwait(false);
+        File.Move(cleanTrace, reservation.Staging.TracePath, overwrite: true);
+        if (reservation.FinalEtlPath is not null && File.Exists(reservation.FinalEtlPath))
+        {
+            File.Delete(reservation.FinalEtlPath);
+        }
     }
 
     private static async Task CopyPrimaryStreamAsync(
@@ -194,6 +249,17 @@ internal sealed class EmbeddedArtifactPublisher : IEmbeddedArtifactPublisher
             {
                 Directory.Delete(path);
             }
+        }
+        catch
+        {
+        }
+    }
+
+    private static void TryDeleteStagingDirectory(string path)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: true);
         }
         catch
         {

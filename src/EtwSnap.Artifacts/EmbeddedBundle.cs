@@ -10,7 +10,7 @@ public sealed class EmbeddedBundle
 
     public async Task<EmbeddedBundleDescriptor> CreateAsync(
         string sessionDirectory,
-        string primaryEtlPath,
+        string? primaryEtlPath,
         Guid sessionId,
         Guid providerId,
         int manifestSchemaVersion,
@@ -27,8 +27,7 @@ public sealed class EmbeddedBundle
 
         var files = EnumerateArtifactFiles(root)
             .Select(path => new { FullPath = path, RelativePath = NormalizeEntryName(Path.GetRelativePath(root, path)) })
-            .Where(file => !string.Equals(file.FullPath, Path.GetFullPath(primaryEtlPath), StringComparison.OrdinalIgnoreCase))
-            .Where(file => !string.Equals(file.RelativePath, "trace.etl", StringComparison.OrdinalIgnoreCase))
+            .Where(file => !file.RelativePath.EndsWith(".etl", StringComparison.OrdinalIgnoreCase))
             .Where(file => !string.Equals(file.RelativePath, ".reserved", StringComparison.Ordinal))
             .Where(file => !file.RelativePath.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
             .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
@@ -61,7 +60,9 @@ public sealed class EmbeddedBundle
             DateTimeOffset.UtcNow,
             manifestSchemaVersion,
             await HashFileAsync(manifestPath, cancellationToken).ConfigureAwait(false),
-            await HashFileAsync(primaryEtlPath, cancellationToken).ConfigureAwait(false),
+            primaryEtlPath is null
+                ? null
+                : await HashFileAsync(primaryEtlPath, cancellationToken).ConfigureAwait(false),
             entries);
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destinationZipPath))!);
@@ -96,7 +97,7 @@ public sealed class EmbeddedBundle
 
     public async Task<EmbeddedBundleInspection> InspectAsync(
         Stream bundleStream,
-        string primaryEtlPath,
+        string? primaryEtlPath,
         Guid? expectedSessionId,
         CancellationToken cancellationToken)
     {
@@ -230,8 +231,15 @@ public sealed class EmbeddedBundle
         {
             throw new EmbeddedArtifactException("The manifest is missing or its hash does not match.");
         }
-        var etlHash = await HashFileAsync(primaryEtlPath, cancellationToken).ConfigureAwait(false);
-        if (!string.Equals(etlHash, descriptor.PrimaryEtlSha256, StringComparison.OrdinalIgnoreCase))
+        if (descriptor.PrimaryEtlSha256 is not null && primaryEtlPath is null)
+        {
+            throw new EmbeddedArtifactException("The artifact ZIP requires its matching ETL for verification.");
+        }
+        if (descriptor.PrimaryEtlSha256 is not null &&
+            !string.Equals(
+                await HashFileAsync(primaryEtlPath!, cancellationToken).ConfigureAwait(false),
+                descriptor.PrimaryEtlSha256,
+                StringComparison.OrdinalIgnoreCase))
         {
             throw new EmbeddedArtifactException("The embedded artifacts do not belong to this ETL primary stream.");
         }

@@ -62,14 +62,9 @@ namespace
         return size == expectedSize && version == ETWSNAP_API_VERSION;
     }
 
-    bool ValidArtifactPaths(
-        const wchar_t* artifactDirectory,
-        const wchar_t* sessionDirectoryName,
-        const wchar_t* manifestRelativePath,
-        const wchar_t* portableManifestRelativePath)
+    bool ValidArtifactPaths(const wchar_t* artifactPath, const wchar_t* artifactFileName)
     {
-        return artifactDirectory != nullptr && sessionDirectoryName != nullptr &&
-            manifestRelativePath != nullptr && portableManifestRelativePath != nullptr;
+        return artifactPath != nullptr && artifactFileName != nullptr;
     }
 }
 
@@ -240,11 +235,7 @@ extern "C"
     {
         if (artifact == nullptr ||
             !ValidStruct(artifact->StructSize, artifact->ApiVersion, sizeof(EtwSnapArtifactReference)) ||
-            !ValidArtifactPaths(
-                artifact->ArtifactDirectory,
-                artifact->SessionDirectoryName,
-                artifact->ManifestRelativePath,
-                artifact->PortableManifestRelativePath))
+            !ValidArtifactPaths(artifact->ArtifactPath, artifact->ArtifactFileName))
         {
             SetLastErrorMessage(L"Invalid artifact reference.");
             return EtwSnapResult_InvalidArgument;
@@ -258,12 +249,8 @@ extern "C"
     {
         if (artifact == nullptr ||
             !ValidStruct(artifact->StructSize, artifact->ApiVersion, sizeof(EtwSnapArtifactCommitted)) ||
-            !ValidArtifactPaths(
-                artifact->ArtifactDirectory,
-                artifact->SessionDirectoryName,
-                artifact->ManifestRelativePath,
-                artifact->PortableManifestRelativePath) ||
-            artifact->ManifestSha256 == nullptr || artifact->Status == nullptr)
+            !ValidArtifactPaths(artifact->ArtifactPath, artifact->ArtifactFileName) ||
+            artifact->ManifestSha256 == nullptr || artifact->ArtifactSha256 == nullptr || artifact->Status == nullptr)
         {
             SetLastErrorMessage(L"Invalid committed artifact.");
             return EtwSnapResult_InvalidArgument;

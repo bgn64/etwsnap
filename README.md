@@ -66,19 +66,33 @@ etwsnap stop D:\Captures
 
 The destination is reserved before capture stops. If it is invalid or unwritable, recording remains active so `stop` can be retried with another path.
 
+Screenshot-only sessions produce one canonical artifact ZIP:
+
+```text
+D:\Captures\etwsnap-20260904T142530Z-a1b2c3d4.etwsnap.zip
+```
+
+Traced sessions produce a sibling pair with the same basename:
+
+```text
+D:\Captures\etwsnap-20260904T142530Z-a1b2c3d4.etl
+D:\Captures\etwsnap-20260904T142530Z-a1b2c3d4.etwsnap.zip
+```
+
 For a session started with `--trace`, artifacts can instead be attached to a standalone ETL on NTFS:
 
 ```powershell
 etwsnap stop D:\Captures --embed-artifacts
 ```
 
-The ETL primary bytes remain an ordinary ETL. If embedded publication is unsupported or fails, ETWSnap saves the normal session folder and prints a prominent warning. Folder output remains the default.
+The ETL primary bytes remain an ordinary ETL. Successful embedded output leaves only the ETL; its named stream contains exactly the same canonical ZIP payload used by sidecar mode. If embedding is unsupported or fails, ETWSnap saves the normal ETL and `.etwsnap.zip` pair and prints a warning.
 
-Inspect, add, extract, or remove embedded artifacts without starting the capture host:
+Inspect, add, export, or remove artifacts without starting the capture host:
 
 ```powershell
-etwsnap artifacts inspect D:\Captures\trace.etl
-etwsnap artifacts add D:\Captures\trace.etl D:\Captures\etwsnap-session
+etwsnap artifacts inspect D:\Captures\capture.etwsnap.zip
+etwsnap artifacts inspect D:\Captures\capture.etl
+etwsnap artifacts add D:\Captures\capture.etl D:\Captures\capture.etwsnap.zip
 etwsnap artifacts remove D:\Captures\trace.etl --output-root D:\Extracted
 etwsnap artifacts remove D:\Captures\trace.etl --session <session-id> --force
 ```
@@ -110,21 +124,20 @@ Window and monitor handles may be decimal or hexadecimal with a `0x` prefix.
 
 ## Session Artifact
 
-`stop D:\Captures` creates a session directory resembling:
+Every capture session produces one `.etwsnap.zip` artifact. The ZIP contains screenshots and metadata but never an ETL:
 
 ```text
-D:\Captures\etwsnap-20260904T142530Z-a1b2c3d4\
-	frames\
-		frame_00000001.png
-		frame_00000002.png
-	manifest.json
-	trace.etl              # only with --trace
-	EtwSnap.wprp           # only with --trace
+bundle.json
+manifest.json
+frames/
+  frame_00000001.png
+  frame_00000002.png
+EtwSnap.wprp             # when tracing was requested
 ```
 
-`manifest.json` records capture settings, provider identity, WPR profile hashes, aggregate frame counts, and each saved frame's correlation metadata. A failed trace stop or failed frame export produces a partial artifact rather than deleting successful output.
+`manifest.json` records capture settings, provider identity, WPR profile hashes, aggregate frame counts, and each saved frame's correlation metadata. `bundle.json` indexes and hashes every entry. Traced artifacts also bind to the exact sibling or host ETL SHA-256. Screenshot-only artifacts have no ETL binding.
 
-ETWSnap also emits versioned artifact-discovery events. `ArtifactReference` is written before ETWSnap stops WPR and identifies the reserved output directory. `ArtifactCommitted` is written after manifest finalization and includes its SHA-256, so it is normally visible only to an external ETW session that continues recording. The complete event contract is documented in [docs/etw-schema.md](docs/etw-schema.md).
+ETWSnap also emits versioned artifact-discovery events. `ArtifactReference` is written before ETWSnap stops WPR and identifies the canonical ZIP or stream destination. `ArtifactCommitted` is written after publication and includes manifest and artifact ZIP SHA-256 values, so it is normally visible only to an external ETW session that continues recording. The complete event contract is documented in [docs/etw-schema.md](docs/etw-schema.md).
 
 ## Correlation Contract
 

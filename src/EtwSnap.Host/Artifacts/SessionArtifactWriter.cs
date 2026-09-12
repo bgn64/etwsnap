@@ -188,9 +188,8 @@ internal sealed class SessionArtifactWriter : IArtifactWriter
             Stopwatch.Frequency,
             session.Request,
             new ProviderManifest(EtwSnapConstants.ProviderName, EtwSnapConstants.ProviderId),
-            session.Wpr is null ? null : new TraceManifest(
+            tracePath is null || session.Wpr is null ? null : new TraceManifest(
                 session.Wpr.InstanceName,
-                tracePath is null ? null : Path.GetFileName(tracePath),
                 "EtwSnap.wprp",
                 session.Wpr.SupplementalProfileHash,
                 session.Wpr.UserProfilePath,

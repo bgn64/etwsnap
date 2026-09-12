@@ -1,6 +1,6 @@
 # ETWSnap WPA Plugin
 
-`EtwSnap.WpaPlugin` is an independent Microsoft Performance Toolkit SDK `ProcessingSource`. It uses only public SDK and TraceEvent APIs and can coexist with XPerf while parsing the same ETL independently.
+`EtwSnap.WpaPlugin` provides independent Microsoft Performance Toolkit SDK processing sources for ETL files and `.etwsnap.zip` artifacts. It uses only public SDK and TraceEvent APIs and can coexist with XPerf while parsing the same ETL independently.
 
 ## Tables
 
@@ -26,38 +26,31 @@ The first plugin version is table-only. It does not provide thumbnails, image pr
 
 ## Artifact discovery
 
-For each `(ETL source path, full session ID)`, the plugin first checks the deterministic named stream `EtwSnap.Session.<session-id:N>`. A present stream is fully verified against the ETL primary-stream hash, bundle index, manifest, provider identity, and ETW frame metadata. A valid embedded bundle takes precedence over folders. An invalid stream is reported and is never hidden by a folder fallback.
+For each `(ETL source path, full session ID)`, the plugin first checks the deterministic named stream `EtwSnap.Session.<session-id:N>`. A present stream is fully verified against the ETL primary-stream hash, bundle index, manifest, provider identity, and ETW frame metadata. A valid embedded bundle takes precedence over sidecars. An invalid stream is reported and is never hidden by a sidecar.
 
-When the exact stream is absent, the plugin checks only these candidates:
+When the exact stream is absent, the plugin checks only these sibling candidates:
 
-1. The original artifact directory recorded by `ArtifactReference` or `ArtifactCommitted`.
-2. `manifest.json` beside the ETL for an ordinary ETWSnap session directory.
-3. `sessions/<full-session-id>/manifest.json` beside the ETL for a portable multi-session bundle.
+1. `<etl-stem>.etwsnap.zip`
+2. `<etl-stem>.<full-session-id>.etwsnap.zip`
 
-The plugin never recursively scans directories or guesses from frame filenames. Multiple non-identical valid candidates are reported as ambiguous.
+The plugin never recursively scans directories or guesses from frame filenames. It can also open `.etwsnap.zip` directly. Traced ZIPs require their matching sibling ETL; screenshot-only ZIPs build a timeline from manifest QPC metadata.
 
 A manifest must have a supported schema, matching full session ID and provider GUID, unique frame numbers, contained relative image paths, matching ETW frame metadata, and a matching committed SHA-256 when available. Artifact failures do not hide ETW rows.
 
-Embedded PNGs are materialized while WPA loads the trace. Each Image Path is a normal file under `%LOCALAPPDATA%\EtwSnap\WpaCache\<etl-hash>\<session-id>`, so default image viewers can navigate between adjacent frames. Files are written atomically and verified by length and SHA-256; valid cached files are reused. Cleanup is bounded to 2 GiB and 30 days, and deleting the cache is always safe.
+Artifact PNGs are materialized while WPA loads the source. Each Image Path is a normal file under `%LOCALAPPDATA%\EtwSnap\WpaCache\<source-hash>\<session-id>`, so default image viewers can navigate between adjacent frames. The source hash is the ETL hash for traced artifacts and ZIP hash for screenshot-only artifacts. Files are written atomically and verified by length and SHA-256; valid cached files are reused. Cleanup is bounded to 2 GiB and 30 days, and deleting the cache is always safe.
 
-Portable single-session layout:
+Traced sidecar layout:
 
 ```text
-session/
-  trace.etl
-  manifest.json
-  frames/
+capture.etl
+capture.etwsnap.zip
 ```
 
-Portable multi-session layout:
+Exported multi-session layout:
 
 ```text
-bundle/
-  trace.etl
-  sessions/
-    <full-session-id>/
-      manifest.json
-      frames/
+capture.etl
+capture.<full-session-id>.etwsnap.zip
 ```
 
 ## Build and compatibility
@@ -72,19 +65,20 @@ dotnet test .\tests\EtwSnap.WpaPlugin.Tests\EtwSnap.WpaPlugin.Tests.csproj -c Re
 Launch the loose development plugin without installing or packaging it:
 
 ```powershell
-.\eng\Launch-WpaPlugin.ps1 -TracePath .\etwsnap-20260910T162304Z-5d65bd20\trace.etl
+.\eng\Launch-WpaPlugin.ps1 -TracePath .\capture.etl
+.\eng\Launch-WpaPlugin.ps1 -TracePath .\capture.etwsnap.zip
 ```
 
 The launcher deliberately keeps WPA's default processing sources enabled so ETWSnap and XPerf tables are available together. Use `-NoDefault` only when isolating plugin-load failures.
 
 The launcher prefers `wpa.exe` from `PATH` and falls back to the standard ADK location. On the validation machine, `C:\xperf\wpa.exe` loaded the plugin while the older ADK copy could not enumerate loose managed plugins because its host dependency manifest was missing. Pass `-WpaPath` to select a specific installation.
 
-For the checked local sample, validate:
+For a smoke capture, validate:
 
 1. `Help > About Windows Performance Analyzer` includes an ETWSnap processing-source tab.
 2. Graph Explorer contains `ETWSnap Screenshots` and `ETWSnap Sessions`.
-3. Sessions shows ID `5d65bd20-5bdc-4ffc-9853-562989078d96`, 101 accepted, 35 retained, 66 evicted, 0 dropped/errors, and 35 exported.
-4. Screenshots shows 101 rows in `All Frames` and 35 rows in `Saved Screenshots`; saved paths open under the sibling `frames` directory.
+3. Sessions shows the captured session ID and frame statistics.
+4. Screenshots shows the expected rows and normal cache paths under `%LOCALAPPDATA%\EtwSnap\WpaCache`.
 5. An ETWSnap graph and an XPerf graph in the same Analysis tab follow the same zoom and highlighted time range.
 
 If the plugin does not appear, open `Window > Diagnostic Console` and capture the complete load error, then retry with `-NoDefault` to distinguish plugin loading from interaction with default processing sources.

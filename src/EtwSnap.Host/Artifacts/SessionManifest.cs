@@ -21,7 +21,6 @@ internal sealed record ProviderManifest(string Name, Guid Id);
 
 internal sealed record TraceManifest(
     string InstanceName,
-    string? TracePath,
     string SupplementalProfilePath,
     string SupplementalProfileHash,
     string? UserProfilePath,
