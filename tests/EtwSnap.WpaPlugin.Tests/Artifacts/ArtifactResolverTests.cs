@@ -22,14 +22,18 @@ public sealed class ArtifactResolverTests
         var zipPath = await fixture.WriteScreenshotOnlyBundleAsync(sessionId, [[137, 80, 78, 71]]);
         var collector = new PluginEventCollector();
         var parser = new EtwSnapTraceParser([new FileDataSource(zipPath)]);
+        var logger = new RecordingLogger();
 
-        parser.ProcessSource(collector, null!, new Progress<int>(), default);
+        parser.ProcessSource(collector, logger, new Progress<int>(), default);
         var dataSet = EtwSnapDataSet.Build(collector.Events);
 
         Assert.Single(dataSet.Sessions);
         var screenshot = Assert.Single(dataSet.Screenshots);
         Assert.Equal(ScreenshotAvailability.Saved, screenshot.Availability);
         Assert.True(File.Exists(screenshot.ImagePath));
+        Assert.Contains(logger.Messages, message => message.Contains("artifact discovery started", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("Selected direct artifact ZIP", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("State=Resolved", StringComparison.Ordinal));
         File.Delete(screenshot.ImagePath!);
     }
 
@@ -41,13 +45,17 @@ public sealed class ArtifactResolverTests
         var imageBytes = new byte[] { 137, 80, 78, 71, 1, 2, 3 };
         await fixture.WriteSidecarBundleAsync(sessionId, [imageBytes]);
         var frame = CreateFrame(sessionId, fixture.TracePath);
+        var logger = new RecordingLogger();
 
-        var resolution = new ArtifactResolver().Resolve(sessionId, [frame]);
+        var resolution = new ArtifactResolver().Resolve(sessionId, [frame], logger);
         var screenshot = Assert.Single(EtwSnapDataSet.Build([frame]).Screenshots);
 
         Assert.Equal(ArtifactResolutionState.Resolved, resolution.State);
         Assert.True(File.Exists(screenshot.ImagePath));
         Assert.Equal(imageBytes, await File.ReadAllBytesAsync(screenshot.ImagePath!));
+        Assert.Contains(logger.Messages, message => message.Contains("Checking embedded artifact stream", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("Embedded artifact stream does not exist", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("Selected sidecar artifact ZIP", StringComparison.Ordinal));
         File.Delete(screenshot.ImagePath!);
     }
 
@@ -81,10 +89,15 @@ public sealed class ArtifactResolverTests
             [[137, 80, 78, 71]],
             Path.Combine(fixture.Root, EmbeddedArtifactConstants.GetIndexedArtifactFileName(stem, 1)),
             etlPath: otherEtl);
+        var logger = new RecordingLogger();
 
-        var resolution = new ArtifactResolver().Resolve(sessionId, [CreateFrame(sessionId, fixture.TracePath)]);
+        var resolution = new ArtifactResolver().Resolve(sessionId, [CreateFrame(sessionId, fixture.TracePath)], logger);
 
         Assert.Equal(ArtifactResolutionState.NotFound, resolution.State);
+        Assert.Contains(logger.Messages, message =>
+            message.Contains("Skipping sidecar candidate", StringComparison.Ordinal) &&
+            message.Contains("EtlHashMatches=False", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("State=NotFound", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -172,11 +185,14 @@ public sealed class ArtifactResolverTests
         File.WriteAllBytes(
             new NamedStreamStore().GetStreamPath(fixture.TracePath, EmbeddedArtifactConstants.GetStreamName(sessionId)),
             "not-a-zip"u8.ToArray());
+        var logger = new RecordingLogger();
 
-        var resolution = new ArtifactResolver().Resolve(sessionId, [CreateFrame(sessionId, fixture.TracePath)]);
+        var resolution = new ArtifactResolver().Resolve(sessionId, [CreateFrame(sessionId, fixture.TracePath)], logger);
 
         Assert.NotEqual(ArtifactResolutionState.Resolved, resolution.State);
         Assert.NotEqual(ArtifactResolutionState.NotFound, resolution.State);
+        Assert.Contains(logger.Messages, message => message.Contains("Rejected embedded artifact stream", StringComparison.Ordinal));
+        Assert.DoesNotContain(logger.Messages, message => message.Contains("Selected sidecar artifact ZIP", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -426,6 +442,28 @@ public sealed class ArtifactResolverTests
         {
             Events.Add(data);
             return DataProcessingResult.Processed;
+        }
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public List<string> Messages { get; } = [];
+
+        public void Verbose(string fmt, params object[] args) => Add("Verbose", null, fmt, args);
+        public void Verbose(Exception e, string fmt, params object[] args) => Add("Verbose", e, fmt, args);
+        public void Info(string fmt, params object[] args) => Add("Info", null, fmt, args);
+        public void Info(Exception e, string fmt, params object[] args) => Add("Info", e, fmt, args);
+        public void Warn(string fmt, params object[] args) => Add("Warn", null, fmt, args);
+        public void Warn(Exception e, string fmt, params object[] args) => Add("Warn", e, fmt, args);
+        public void Error(string fmt, params object[] args) => Add("Error", null, fmt, args);
+        public void Error(Exception e, string fmt, params object[] args) => Add("Error", e, fmt, args);
+        public void Fatal(string fmt, params object[] args) => Add("Fatal", null, fmt, args);
+        public void Fatal(Exception e, string fmt, params object[] args) => Add("Fatal", e, fmt, args);
+
+        private void Add(string level, Exception? exception, string format, object[] args)
+        {
+            var suffix = exception is null ? string.Empty : $" Exception={exception.GetType().Name}";
+            Messages.Add($"{level}: {string.Format(System.Globalization.CultureInfo.InvariantCulture, format, args)}{suffix}");
         }
     }
 }

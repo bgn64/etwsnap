@@ -1,4 +1,5 @@
 using EtwSnap.Artifacts;
+using EtwSnap.WpaPlugin.Artifacts;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Performance.SDK;
 using Microsoft.Performance.SDK.Extensibility.SourceParsing;
@@ -31,14 +32,16 @@ public sealed class EtwSnapTraceParser : SourceParser<EtwSnapEvent, EtwSnapParsi
         long? firstTimestampNanoseconds = null;
         long? lastTimestampNanoseconds = null;
         DateTime? sessionStartUtc = null;
+        var artifactResolver = new ArtifactResolver();
 
         for (var index = 0; index < _dataSources.Count; ++index)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var sourcePath = _dataSources[index].FullPath;
+            var sourceEvents = new List<EtwSnapEvent>();
             if (sourcePath.EndsWith(EmbeddedArtifactConstants.ArtifactFileExtension, StringComparison.OrdinalIgnoreCase))
             {
-                var range = ProcessArchive(sourcePath, dataProcessor, cancellationToken);
+                var range = ProcessArchive(sourcePath, sourceEvents, dataProcessor, cancellationToken);
                 sessionStartUtc ??= range.SessionStartUtc;
                 firstTimestampNanoseconds = firstTimestampNanoseconds is null
                     ? range.FirstNanoseconds
@@ -67,9 +70,19 @@ public sealed class EtwSnapTraceParser : SourceParser<EtwSnapEvent, EtwSnapParsi
                     lastTimestampNanoseconds = lastTimestampNanoseconds is null
                         ? timestamp
                         : Math.Max(lastTimestampNanoseconds.Value, timestamp);
+                    sourceEvents.Add(parsedEvent);
                     dataProcessor.ProcessDataElement(parsedEvent, _context, cancellationToken);
                 };
                 source.Process();
+            }
+            if (sourceEvents.Count == 0)
+            {
+                logger.Info("{0}", $"ETWSnap artifact discovery skipped: no ETWSnap sessions were parsed from '{sourcePath}'.");
+            }
+            foreach (var sessionEvents in sourceEvents.GroupBy(item => item.SessionId))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                artifactResolver.Resolve(sessionEvents.Key, sessionEvents.ToArray(), logger);
             }
             progress.Report(checked((index + 1) * 100 / _dataSources.Count));
         }
@@ -81,6 +94,7 @@ public sealed class EtwSnapTraceParser : SourceParser<EtwSnapEvent, EtwSnapParsi
 
     private ArchiveRange ProcessArchive(
         string archivePath,
+        ICollection<EtwSnapEvent> sourceEvents,
         ISourceDataProcessor<EtwSnapEvent, EtwSnapParsingContext, Type> dataProcessor,
         CancellationToken cancellationToken)
     {
@@ -143,6 +157,7 @@ public sealed class EtwSnapTraceParser : SourceParser<EtwSnapEvent, EtwSnapParsi
             var timestamp = item.Timestamp.ToNanoseconds;
             archiveFirst = archiveFirst is null ? timestamp : Math.Min(archiveFirst.Value, timestamp);
             archiveLast = archiveLast is null ? timestamp : Math.Max(archiveLast.Value, timestamp);
+            sourceEvents.Add(item);
             dataProcessor.ProcessDataElement(item, _context, cancellationToken);
         }
     }

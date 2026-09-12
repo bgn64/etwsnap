@@ -37,6 +37,8 @@ The plugin searches only the ETL's own directory, never subdirectories. Numbered
 
 A manifest must have a supported schema, matching full session ID and provider GUID, unique frame numbers, contained relative image paths, matching ETW frame metadata, and a matching committed SHA-256 when available. Artifact failures do not hide ETW rows.
 
+Open `Window > Diagnostic Console` in WPA to inspect artifact discovery. The plugin emits one resolution trace per source and session, including the exact embedded stream and sibling ZIP candidates checked, reasons candidates were skipped or rejected, the selected artifact and frame count, and the final resolution state.
+
 Artifact PNGs are materialized while WPA loads the source. Each Image Path is a normal file under `%LOCALAPPDATA%\EtwSnap\WpaCache\<source-hash>\<session-id>`, so default image viewers can navigate between adjacent frames. The source hash is the ETL hash for traced artifacts and ZIP hash for screenshot-only artifacts. Files are written atomically and verified by length and SHA-256; valid cached files are reused. Cleanup is bounded to 2 GiB and 30 days, and deleting the cache is always safe.
 
 Traced sidecar layout:
