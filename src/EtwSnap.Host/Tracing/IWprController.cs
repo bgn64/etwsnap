@@ -17,4 +17,6 @@ internal sealed record WprSession(
     string? UserProfileHash,
     string StagingDirectory);
 
-internal sealed class WprException(string message) : Exception(message);
+internal class WprException(string message) : Exception(message);
+
+internal sealed class WprElevationRequiredException(string message) : WprException(message);

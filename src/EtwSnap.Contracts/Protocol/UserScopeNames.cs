@@ -3,9 +3,25 @@ using System.Text;
 
 namespace EtwSnap.Contracts.Protocol;
 
+public enum HostPrivilegeScope
+{
+    Standard,
+    Elevated,
+}
+
 public static class UserScopeNames
 {
-    public static string PipeName(string userSid) => $"{ProtocolConstants.PipeNamePrefix}-{Hash(userSid)}";
+    public static string PipeName(string userSid, int sessionId, HostPrivilegeScope privilegeScope)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(sessionId);
+        var scope = privilegeScope switch
+        {
+            HostPrivilegeScope.Standard => "standard",
+            HostPrivilegeScope.Elevated => "elevated",
+            _ => throw new ArgumentOutOfRangeException(nameof(privilegeScope)),
+        };
+        return $"{ProtocolConstants.PipeNamePrefix}-{Hash(userSid)}-{sessionId}-{scope}";
+    }
 
     private static string Hash(string value)
     {

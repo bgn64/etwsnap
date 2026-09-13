@@ -2,34 +2,30 @@ using EtwSnap.Contracts.Protocol;
 
 namespace EtwSnap.Host.Infrastructure;
 
-internal sealed class HostInstanceLock : IDisposable
+internal sealed class CaptureInstanceLock : IDisposable
 {
     private readonly FileStream _stream;
 
-    private HostInstanceLock(FileStream stream)
+    private CaptureInstanceLock(FileStream stream)
     {
         _stream = stream;
     }
 
-    public static HostInstanceLock? TryAcquire(
-        HostPrivilegeScope privilegeScope,
-        int sessionId,
-        string? lockPath = null)
+    public static CaptureInstanceLock? TryAcquire(int sessionId, string? lockPath = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(sessionId);
-        var path = lockPath ?? GetDefaultPath(privilegeScope, sessionId);
+        var path = lockPath ?? GetDefaultPath(sessionId);
         var directory = Path.GetDirectoryName(path)
             ?? throw new ArgumentException("The lock path must have a parent directory.", nameof(lockPath));
         Directory.CreateDirectory(directory);
 
         try
         {
-            var stream = new FileStream(
+            return new CaptureInstanceLock(new FileStream(
                 path,
                 FileMode.OpenOrCreate,
                 FileAccess.ReadWrite,
-                FileShare.None);
-            return new HostInstanceLock(stream);
+                FileShare.None));
         }
         catch (IOException)
         {
@@ -37,13 +33,13 @@ internal sealed class HostInstanceLock : IDisposable
         }
     }
 
-    internal static string GetDefaultPath(HostPrivilegeScope privilegeScope, int sessionId)
+    internal static string GetDefaultPath(int sessionId)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(sessionId);
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "EtwSnap",
-            $"host-v{ProtocolConstants.CurrentVersion}-{sessionId}-{privilegeScope.ToString().ToLowerInvariant()}.lock");
+            $"capture-v{ProtocolConstants.CurrentVersion}-{sessionId}.lock");
     }
 
     public void Dispose() => _stream.Dispose();

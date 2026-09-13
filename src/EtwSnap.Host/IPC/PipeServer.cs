@@ -1,10 +1,14 @@
 using System.Collections.Concurrent;
 using System.IO.Pipes;
 using EtwSnap.Contracts.Protocol;
+using EtwSnap.Host.Infrastructure;
 
 namespace EtwSnap.Host.IPC;
 
-internal sealed class PipeServer(string pipeName, ICommandDispatcher dispatcher) : IAsyncDisposable
+internal sealed class PipeServer(
+    string pipeName,
+    ICommandDispatcher dispatcher,
+    PipeClientAuthorizer clientAuthorizer) : IAsyncDisposable
 {
     private readonly CancellationTokenSource _shutdown = new();
     private readonly ConcurrentDictionary<int, Task> _clients = new();
@@ -49,6 +53,12 @@ internal sealed class PipeServer(string pipeName, ICommandDispatcher dispatcher)
         {
             try
             {
+                if (!clientAuthorizer.IsAuthorized(pipe))
+                {
+                    HostLog.Error("Rejected a named-pipe client whose token does not match this host's identity scope.");
+                    return;
+                }
+
                 var request = await MessageFraming.ReadAsync(pipe, cancellationToken).ConfigureAwait(false);
                 var writeGate = new SemaphoreSlim(1, 1);
 

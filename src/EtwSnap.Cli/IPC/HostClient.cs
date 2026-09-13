@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Security.Principal;
 using EtwSnap.Cli.Infrastructure;
 using EtwSnap.Contracts.Models;
 using EtwSnap.Contracts.Protocol;
@@ -10,7 +11,10 @@ internal sealed class HostClient
 {
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(8);
-    private readonly string _pipeName = UserScopeNames.PipeName(CurrentUser.Sid);
+    private readonly string _pipeName = UserScopeNames.PipeName(
+        CurrentUser.Sid,
+        CurrentUser.SessionId,
+        CurrentUser.PrivilegeScope);
 
     public async Task<WireMessage> SendAsync<TRequest>(
         CommandKind command,
@@ -89,7 +93,8 @@ internal sealed class HostClient
             ".",
             _pipeName,
             PipeDirection.InOut,
-            PipeOptions.Asynchronous);
+            PipeOptions.Asynchronous,
+            TokenImpersonationLevel.Identification);
 
         using var connectCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         connectCancellation.CancelAfter(connectTimeout);

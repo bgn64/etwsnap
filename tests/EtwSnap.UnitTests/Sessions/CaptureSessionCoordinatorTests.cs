@@ -12,6 +12,33 @@ namespace EtwSnap.UnitTests.Sessions;
 public sealed class CaptureSessionCoordinatorTests
 {
     [Fact]
+    public async Task TraceElevationFailureUsesDedicatedErrorCode()
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.Wpr.StartError = new WprElevationRequiredException("elevation required");
+
+        var exception = await Assert.ThrowsAsync<SessionException>(() =>
+            fixture.Coordinator.StartAsync(CreateRequest() with { Trace = true }, default));
+
+        Assert.Equal(ErrorCodes.ElevationRequired, exception.ErrorCode);
+        Assert.Equal(CaptureSessionState.Idle, fixture.Coordinator.GetStatus().State);
+        Assert.Equal(0, fixture.Factory.CreateCalls);
+    }
+
+    [Fact]
+    public async Task CrossHostCaptureLeasePreventsConcurrentRecording()
+    {
+        var fixture = new CoordinatorFixture(() => null);
+
+        var exception = await Assert.ThrowsAsync<SessionException>(() =>
+            fixture.Coordinator.StartAsync(CreateRequest(), default));
+
+        Assert.Equal(ErrorCodes.AlreadyRecording, exception.ErrorCode);
+        Assert.Equal(0, fixture.Factory.CreateCalls);
+        Assert.Equal(CaptureSessionState.Idle, fixture.Coordinator.GetStatus().State);
+    }
+
+    [Fact]
     public async Task ProfileWithoutTraceIsRejectedBeforeNativeCreation()
     {
         var fixture = new CoordinatorFixture();
@@ -218,24 +245,34 @@ public sealed class CaptureSessionCoordinatorTests
         public FakeArtifactEventEmitter ArtifactEvents { get; }
         public FakeEmbeddedArtifactPublisher EmbeddedPublisher { get; }
         public FakeRecoveryStore Recovery { get; } = new();
+        public FakeWprController Wpr { get; }
 
-        public CoordinatorFixture()
+        public CoordinatorFixture(Func<IDisposable?>? captureLeaseFactory = null)
         {
             Capture = new FakeCaptureSession(StopOperations);
             Factory = new FakeCaptureFactory(Capture);
             ArtifactEvents = new FakeArtifactEventEmitter(StopOperations);
             EmbeddedPublisher = new FakeEmbeddedArtifactPublisher(StopOperations);
+            Wpr = new FakeWprController(StopOperations);
             Coordinator = new CaptureSessionCoordinator(
                 () => Factory,
-                new FakeWprController(StopOperations),
+                Wpr,
                 new FakeArtifactWriter(() => null, StopOperations),
                 EmbeddedPublisher,
                 ArtifactEvents,
                 Recovery,
-                new ValidTargetValidator());
+                new ValidTargetValidator(),
+                captureLeaseFactory ?? (() => new FakeCaptureLease()));
         }
 
         public CaptureSessionCoordinator Coordinator { get; }
+    }
+
+    private sealed class FakeCaptureLease : IDisposable
+    {
+        public void Dispose()
+        {
+        }
     }
 
     private sealed class FakeEmbeddedArtifactPublisher(List<string> stopOperations) : IEmbeddedArtifactPublisher
@@ -423,8 +460,12 @@ public sealed class CaptureSessionCoordinatorTests
 
     private sealed class FakeWprController(List<string> stopOperations) : IWprController
     {
+        public Exception? StartError { get; set; }
+
         public Task<WprSession> StartAsync(Guid sessionId, string? userProfileSelector, CancellationToken cancellationToken) =>
-            Task.FromResult(new WprSession("test", [], "hash", null, null, null, "staging"));
+            StartError is null
+                ? Task.FromResult(new WprSession("test", [], "hash", null, null, null, "staging"))
+                : Task.FromException<WprSession>(StartError);
 
         public Task StopAsync(WprSession session, string outputPath, CancellationToken cancellationToken)
         {

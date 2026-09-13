@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EtwSnap.Artifacts;
 using EtwSnap.Contracts.Models;
+using EtwSnap.Contracts.Protocol;
 using EtwSnap.Host.Recovery;
 using EtwSnap.Host.Tracing;
 using Xunit.Sdk;
@@ -41,7 +42,7 @@ public sealed class RecoveryStoreTests
             var streamName = EmbeddedArtifactConstants.GetStreamName(sessionId);
             await File.WriteAllBytesAsync(new NamedStreamStore().GetStreamPath(tracePath, streamName), "partial"u8.ToArray());
 
-            var store = new RecoveryStore(stateRoot);
+            var store = new RecoveryStore(stateRoot, HostPrivilegeScope.Elevated);
             var request = new StartCaptureRequest(
                 true,
                 null,
@@ -149,7 +150,7 @@ public sealed class RecoveryStoreTests
                 new NamedStreamStore().GetStreamPath(finalEtl, streamName),
                 "invalid-zip"u8.ToArray());
 
-            var store = new RecoveryStore(stateRoot);
+            var store = new RecoveryStore(stateRoot, HostPrivilegeScope.Elevated);
             var request = new StartCaptureRequest(
                 true,
                 null,
@@ -170,6 +171,54 @@ public sealed class RecoveryStoreTests
             Assert.True(File.Exists(finalEtl));
             Assert.True(File.Exists(finalZip));
             Assert.Empty(new NamedStreamStore().EnumerateEtwSnapStreams(finalEtl));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task MismatchedPrivilegeScopeLeavesRecoveryRecordForMatchingHost()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"etwsnap-recovery-{Guid.NewGuid():N}");
+        try
+        {
+            var sessionId = Guid.NewGuid();
+            var request = new StartCaptureRequest(
+                true,
+                null,
+                new CaptureTarget(CaptureTargetKind.PrimaryMonitor),
+                30,
+                500,
+                true);
+            var elevatedStore = new RecoveryStore(root, HostPrivilegeScope.Elevated);
+            await elevatedStore.BeginAsync(sessionId, DateTimeOffset.UtcNow, request, default);
+            await elevatedStore.MarkAsync(sessionId, "Capturing", null, null, default);
+            var wpr = new FakeWprController();
+
+            await new RecoveryStore(root, HostPrivilegeScope.Standard).RecoverAbandonedAsync(wpr, default);
+
+            Assert.Equal(0, wpr.CancelCalls);
+            var path = Path.Combine(root, sessionId.ToString("N"), "session.json");
+            await using (var stream = File.OpenRead(path))
+            using (var state = await JsonDocument.ParseAsync(stream))
+            {
+                Assert.Equal("Capturing", state.RootElement.GetProperty("status").GetString());
+                Assert.Equal(
+                    (int)HostPrivilegeScope.Elevated,
+                    state.RootElement.GetProperty("privilegeScope").GetInt32());
+            }
+
+            await elevatedStore.RecoverAbandonedAsync(wpr, default);
+
+            Assert.Equal(1, wpr.CancelCalls);
+            await using var recoveredStream = File.OpenRead(path);
+            using var recovered = await JsonDocument.ParseAsync(recoveredStream);
+            Assert.Equal("HostTerminated", recovered.RootElement.GetProperty("status").GetString());
         }
         finally
         {

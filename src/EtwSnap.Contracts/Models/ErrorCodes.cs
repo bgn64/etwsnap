@@ -8,6 +8,7 @@ public static class ErrorCodes
     public const string NotRecording = "not_recording";
     public const string InvalidTarget = "invalid_target";
     public const string InvalidProfile = "invalid_profile";
+    public const string ElevationRequired = "elevation_required";
     public const string CaptureFailed = "capture_failed";
     public const string TraceFailed = "trace_failed";
     public const string OutputFailed = "output_failed";
