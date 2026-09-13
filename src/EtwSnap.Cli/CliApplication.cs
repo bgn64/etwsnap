@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using EtwSnap.Artifacts;
+using EtwSnap.Cli.Infrastructure;
 using EtwSnap.Cli.IPC;
 using EtwSnap.Contracts;
 using EtwSnap.Contracts.Models;
@@ -81,6 +82,13 @@ internal sealed class CliApplication
             if (profileValue is not null && !traceValue)
             {
                 return WriteUsageError("--profile requires --trace.");
+            }
+
+            if (traceValue && CurrentUser.PrivilegeScope != HostPrivilegeScope.Elevated)
+            {
+                return WriteOperationError(
+                    ErrorCodes.ElevationRequired,
+                    "ETW tracing requires an elevated terminal. Start PowerShell as Administrator and retry.");
             }
 
             if (windowValue is not null && monitorValue is not null)
@@ -548,5 +556,11 @@ internal sealed class CliApplication
     {
         Console.Error.WriteLine($"Usage error: {message}");
         return UsageError;
+    }
+
+    private static int WriteOperationError(string errorCode, string message)
+    {
+        Console.Error.WriteLine($"Error [{errorCode}]: {message}");
+        return OperationError;
     }
 }

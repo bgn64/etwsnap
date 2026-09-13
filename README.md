@@ -48,6 +48,8 @@ Start screenshots and collect ETWSnap events with the bundled WPR profile:
 etwsnap start --trace
 ```
 
+Run tracing commands from an elevated terminal. A non-elevated `start --trace` fails with `elevation_required` before starting a host. Continue to use an elevated terminal for `status`, `stop`, or `cancel` on that traced session; non-elevated clients cannot connect to or control an elevated host.
+
 Compose a user profile with the bundled ETWSnap profile in the same WPR recording:
 
 ```powershell
@@ -171,7 +173,7 @@ EtwSnap.Native    C++20 WGC/D3D11 capture, GPU ring, ETW correlation
 EtwSnap.WpaPlugin Public Performance Toolkit SDK processor and WPA tables
 ```
 
-The host is an on-demand per-user process, not a Windows Service. Its mutex and named pipe are scoped by the current user's SID, and the pipe uses current-user-only access. It exits after five idle minutes.
+The host is an on-demand process, not a Windows Service. Host locks and named pipes are scoped by the current user's SID, Windows session, and privilege level, and the pipe uses current-user-only access. Before reading a command, the host impersonates the connected client and requires its SID, session, and elevation to match the host. Standard and elevated hosts therefore cannot be reused across the privilege boundary. A separate capture lease preserves one active recording per Windows session. Hosts exit after five idle minutes.
 
 Frames remain in GPU memory during capture. The ring evicts oldest textures according to actual logical BGRA bytes, preserving frame numbers and reporting evictions. A host crash loses retained frames by design; local recovery state is used to detect the abandoned session and clean up only ETWSnap's named WPR instance.
 
@@ -183,7 +185,7 @@ Frames remain in GPU memory during capture. The ring evicts oldest textures acco
 - .NET 8 SDK targeting support for building the WPA plugin
 - Visual Studio C++ build tools with C++20 and a Windows SDK
 - Windows Performance Recorder for `--trace`
-- An elevated terminal when WPR requires administrator access
+- An elevated terminal for `--trace` and all commands that manage that traced session
 
 ## Build
 

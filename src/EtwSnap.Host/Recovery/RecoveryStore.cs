@@ -1,5 +1,7 @@
 using System.Text.Json;
 using EtwSnap.Contracts.Models;
+using EtwSnap.Contracts.Protocol;
+using EtwSnap.Host.Infrastructure;
 using EtwSnap.Host.Tracing;
 
 namespace EtwSnap.Host.Recovery;
@@ -23,18 +25,20 @@ internal sealed class RecoveryStore : IRecoveryStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly string _root;
+    private readonly HostPrivilegeScope _privilegeScope;
 
     public RecoveryStore()
         : this(Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "EtwSnap",
-            "Sessions"))
+            "Sessions"), CurrentUser.PrivilegeScope)
     {
     }
 
-    internal RecoveryStore(string root)
+    internal RecoveryStore(string root, HostPrivilegeScope privilegeScope)
     {
         _root = Path.GetFullPath(root);
+        _privilegeScope = privilegeScope;
     }
 
     public Task BeginAsync(Guid sessionId, DateTimeOffset startedAtUtc, StartCaptureRequest request, CancellationToken cancellationToken) =>
@@ -44,7 +48,9 @@ internal sealed class RecoveryStore : IRecoveryStore
             startedAtUtc,
             request.Trace ? $"EtwSnap_{sessionId:N}" : null,
             null,
-            null), cancellationToken);
+            null,
+            null,
+            _privilegeScope), cancellationToken);
 
     public async Task MarkAsync(
         Guid sessionId,
@@ -98,6 +104,13 @@ internal sealed class RecoveryStore : IRecoveryStore
                                 !(record.Status == "Failed" &&
                                     record.Artifacts is not null &&
                                     Directory.Exists(record.Artifacts.StagingDirectory)))
+            {
+                continue;
+            }
+
+            var requiredPrivilegeScope = record.PrivilegeScope ??
+                (record.WprInstance is null ? null : HostPrivilegeScope.Elevated);
+            if (requiredPrivilegeScope is not null && requiredPrivilegeScope != _privilegeScope)
             {
                 continue;
             }
@@ -328,4 +341,5 @@ internal sealed record RecoveryRecord(
     string? WprInstance,
     string? OutputDirectory,
     string? Error,
-    RecoveryArtifactState? Artifacts = null);
+    RecoveryArtifactState? Artifacts = null,
+    HostPrivilegeScope? PrivilegeScope = null);

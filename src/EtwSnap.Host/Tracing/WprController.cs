@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Xml.Linq;
+using EtwSnap.Contracts.Protocol;
+using EtwSnap.Host.Infrastructure;
 
 namespace EtwSnap.Host.Tracing;
 
@@ -24,6 +26,11 @@ internal sealed class WprController : IWprController
 
     public async Task<WprSession> StartAsync(Guid sessionId, string? userProfileSelector, CancellationToken cancellationToken)
     {
+        if (CurrentUser.PrivilegeScope != HostPrivilegeScope.Elevated)
+        {
+            throw CreateProcessFailure(unchecked((int)0x80070005), "Access is denied.");
+        }
+
         EnsurePrerequisites();
         var instanceName = $"EtwSnap_{sessionId:N}";
         var stagingDirectory = GetStagingDirectory(sessionId);
@@ -243,8 +250,21 @@ internal sealed class WprController : IWprController
         if (process.ExitCode != 0)
         {
             var diagnostic = string.Join(Environment.NewLine, new[] { error, output }.Where(value => !string.IsNullOrWhiteSpace(value)));
-            throw new WprException($"wpr.exe exited with code {process.ExitCode}: {diagnostic.Trim()}");
+            throw CreateProcessFailure(process.ExitCode, diagnostic);
         }
+    }
+
+    internal static WprException CreateProcessFailure(int exitCode, string diagnostic)
+    {
+        const int ErrorAccessDenied = 5;
+        const int EAccessDenied = unchecked((int)0x80070005);
+        if (exitCode is ErrorAccessDenied or EAccessDenied)
+        {
+            return new WprElevationRequiredException(
+                "ETW tracing requires an elevated ETWSnap host. Start PowerShell as Administrator and retry.");
+        }
+
+        return new WprException($"wpr.exe exited with code {exitCode}: {diagnostic.Trim()}");
     }
 
     internal static (string Path, string Selector) ParseProfileSelector(string selector)

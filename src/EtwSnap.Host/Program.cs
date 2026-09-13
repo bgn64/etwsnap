@@ -15,7 +15,9 @@ internal static class Program
 {
     public static async Task<int> Main()
     {
-        using var instance = HostInstanceLock.TryAcquire();
+        var privilegeScope = CurrentUser.PrivilegeScope;
+        var sessionId = CurrentUser.SessionId;
+        using var instance = HostInstanceLock.TryAcquire(privilegeScope, sessionId);
         if (instance is null)
         {
             return 0;
@@ -31,7 +33,17 @@ internal static class Program
         var targets = new TargetEnumerator();
         var wpr = new WprController(WprPaths.SupplementalProfile);
         var recovery = new RecoveryStore();
-        await recovery.RecoverAbandonedAsync(wpr, shutdown.Token).ConfigureAwait(false);
+        using (var recoveryLease = CaptureInstanceLock.TryAcquire(sessionId))
+        {
+            if (recoveryLease is not null)
+            {
+                await recovery.RecoverAbandonedAsync(wpr, shutdown.Token).ConfigureAwait(false);
+            }
+            else
+            {
+                HostLog.Info("Skipped recovery because another ETWSnap host owns the capture lease.");
+            }
+        }
         var coordinator = new CaptureSessionCoordinator(
             () => new NativeCaptureFactory(),
             wpr,
@@ -39,9 +51,13 @@ internal static class Program
             new EmbeddedArtifactPublisher(),
             NativeArtifactEventEmitter.Instance,
             recovery,
-            targets);
+            targets,
+            () => CaptureInstanceLock.TryAcquire(sessionId));
         var dispatcher = new CommandDispatcher(coordinator, targets);
-        await using var server = new PipeServer(UserScopeNames.PipeName(CurrentUser.Sid), dispatcher);
+        await using var server = new PipeServer(
+            UserScopeNames.PipeName(CurrentUser.Sid, sessionId, privilegeScope),
+            dispatcher,
+            new PipeClientAuthorizer(CurrentUser.Sid, sessionId, privilegeScope));
         var idleShutdown = MonitorIdleAsync(coordinator, shutdown);
 
         try

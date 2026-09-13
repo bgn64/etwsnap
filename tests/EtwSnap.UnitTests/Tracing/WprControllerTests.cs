@@ -5,6 +5,27 @@ namespace EtwSnap.UnitTests.Tracing;
 
 public sealed class WprControllerTests
 {
+    [Theory]
+    [InlineData(5)]
+    [InlineData(-2147024891)]
+    public void AccessDeniedExitCodesProduceElevationError(int exitCode)
+    {
+        var exception = WprController.CreateProcessFailure(exitCode, "Access is denied.");
+
+        Assert.IsType<WprElevationRequiredException>(exception);
+        Assert.Contains("elevated", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OtherExitCodesPreserveWprDiagnostic()
+    {
+        var exception = WprController.CreateProcessFailure(42, "profile failed");
+
+        Assert.IsType<WprException>(exception);
+        Assert.Contains("42", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("profile failed", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void StartArgumentsComposeProfilesAndPlaceInstanceNameLast()
     {

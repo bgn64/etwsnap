@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using EtwSnap.Contracts.Models;
 using EtwSnap.Contracts.Protocol;
+using EtwSnap.Host.Infrastructure;
 using EtwSnap.Host.IPC;
 
 namespace EtwSnap.IntegrationTests.IPC;
@@ -12,7 +13,10 @@ public sealed class PipeServerTests
     {
         var pipeName = $"etwsnap-test-{Guid.NewGuid():N}";
         using var cancellation = new CancellationTokenSource();
-        await using var server = new PipeServer(pipeName, new PingDispatcher());
+        await using var server = new PipeServer(
+            pipeName,
+            new PingDispatcher(),
+            new PipeClientAuthorizer(CurrentUser.Sid, CurrentUser.SessionId, CurrentUser.PrivilegeScope));
         var serverTask = server.RunAsync(cancellation.Token);
 
         var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => SendPingAsync(pipeName)));
@@ -29,13 +33,47 @@ public sealed class PipeServerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => serverTask);
     }
 
+    [Fact]
+    public async Task ClientOutsideExpectedIdentityScopeIsRejectedBeforeDispatch()
+    {
+        var wrongScope = CurrentUser.PrivilegeScope == HostPrivilegeScope.Standard
+            ? HostPrivilegeScope.Elevated
+            : HostPrivilegeScope.Standard;
+        var dispatcher = new CountingDispatcher();
+        await AssertRejectedAsync(CurrentUser.Sid + "-other", CurrentUser.SessionId, CurrentUser.PrivilegeScope, dispatcher);
+        await AssertRejectedAsync(CurrentUser.Sid, CurrentUser.SessionId + 1, CurrentUser.PrivilegeScope, dispatcher);
+        await AssertRejectedAsync(CurrentUser.Sid, CurrentUser.SessionId, wrongScope, dispatcher);
+        Assert.Equal(0, dispatcher.DispatchCalls);
+    }
+
+    private static async Task AssertRejectedAsync(
+        string expectedSid,
+        int expectedSessionId,
+        HostPrivilegeScope expectedPrivilegeScope,
+        CountingDispatcher dispatcher)
+    {
+        var pipeName = $"etwsnap-test-{Guid.NewGuid():N}";
+        using var cancellation = new CancellationTokenSource();
+        await using var server = new PipeServer(
+            pipeName,
+            dispatcher,
+            new PipeClientAuthorizer(expectedSid, expectedSessionId, expectedPrivilegeScope));
+        var serverTask = server.RunAsync(cancellation.Token);
+
+        await Assert.ThrowsAnyAsync<IOException>(() => SendPingAsync(pipeName));
+
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => serverTask);
+    }
+
     private static async Task<WireMessage> SendPingAsync(string pipeName)
     {
         await using var pipe = new NamedPipeClientStream(
             ".",
             pipeName,
             PipeDirection.InOut,
-            PipeOptions.Asynchronous);
+            PipeOptions.Asynchronous,
+            System.Security.Principal.TokenImpersonationLevel.Identification);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await pipe.ConnectAsync(timeout.Token);
         var request = WireMessage.CreateRequest(CommandKind.Ping, new EmptyRequest());
@@ -55,5 +93,19 @@ public sealed class PipeServerTests
                     request,
                     true,
                     new PingResult(ProtocolConstants.CurrentVersion, "test")));
+    }
+
+    private sealed class CountingDispatcher : ICommandDispatcher
+    {
+        public int DispatchCalls { get; private set; }
+
+        public Task<WireMessage> DispatchAsync(
+            WireMessage request,
+            Func<WireMessage, ValueTask> progress,
+            CancellationToken cancellationToken)
+        {
+            ++DispatchCalls;
+            return Task.FromResult(WireMessage.CreateResponse(request, true, new EmptyRequest()));
+        }
     }
 }

@@ -16,7 +16,8 @@ internal sealed class CaptureSessionCoordinator(
     IEmbeddedArtifactPublisher embeddedArtifacts,
     IArtifactEventEmitter artifactEvents,
     IRecoveryStore recovery,
-    ITargetValidator targets)
+    ITargetValidator targets,
+    Func<IDisposable?> captureLeaseFactory)
 {
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
@@ -84,8 +85,13 @@ internal sealed class CaptureSessionCoordinator(
             WprSession? wprSession = null;
             INativeCaptureFactory? factory = null;
             INativeCaptureSession? capture = null;
+            IDisposable? captureLease = null;
             try
             {
+                captureLease = captureLeaseFactory()
+                    ?? throw new SessionException(
+                        ErrorCodes.AlreadyRecording,
+                        "A recording is already active in another ETWSnap host for this Windows session.");
                 await recovery.BeginAsync(sessionId, startedAtUtc, request, cancellationToken).ConfigureAwait(false);
                 if (request.Trace)
                 {
@@ -97,18 +103,20 @@ internal sealed class CaptureSessionCoordinator(
                 capture.Start();
 
                 var metadata = new SessionMetadata(sessionId, startedAtUtc, request, wprSession);
+                await recovery.MarkAsync(sessionId, "Capturing", null, null, cancellationToken).ConfigureAwait(false);
                 lock (_stateGate)
                 {
-                    _active = new ActiveSession(metadata, factory, capture);
+                    _active = new ActiveSession(metadata, factory, capture, captureLease);
                     _state = CaptureSessionState.Capturing;
                 }
-                await recovery.MarkAsync(sessionId, "Capturing", null, null, cancellationToken).ConfigureAwait(false);
+                captureLease = null;
                 return new StartCaptureResult(sessionId, startedAtUtc, request.Trace);
             }
             catch (Exception exception)
             {
                 capture?.Dispose();
                 factory?.Dispose();
+                captureLease?.Dispose();
                 if (wprSession is not null)
                 {
                     try
@@ -521,6 +529,7 @@ internal sealed class CaptureSessionCoordinator(
     private static SessionException MapException(Exception exception, string? fallbackCode = null) => exception switch
     {
         SessionException sessionException => sessionException,
+        WprElevationRequiredException => new SessionException(ErrorCodes.ElevationRequired, exception.Message, exception),
         WprException => new SessionException(ErrorCodes.TraceFailed, exception.Message, exception),
         NativeCaptureException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException =>
             new SessionException(ErrorCodes.CaptureFailed, exception.Message, exception),
@@ -530,7 +539,8 @@ internal sealed class CaptureSessionCoordinator(
     private sealed class ActiveSession(
         SessionMetadata metadata,
         INativeCaptureFactory factory,
-        INativeCaptureSession capture) : IDisposable
+        INativeCaptureSession capture,
+        IDisposable captureLease) : IDisposable
     {
         public object NativeGate { get; } = new();
         public SessionMetadata Metadata { get; } = metadata;
@@ -540,6 +550,7 @@ internal sealed class CaptureSessionCoordinator(
         {
             Capture.Dispose();
             factory.Dispose();
+            captureLease.Dispose();
         }
     }
 }
