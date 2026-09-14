@@ -54,6 +54,8 @@ public sealed class EtwSnapTraceParser : SourceParser<EtwSnapEvent, EtwSnapParsi
             {
                 using var source = new ETWTraceEventSource(sourcePath);
                 sessionStartUtc ??= source.SessionStartTime.ToUniversalTime();
+                long qpcFrequency = 0;
+                source.Kernel.EventTraceHeader += header => qpcFrequency = header.PerfFreq;
                 source.Dynamic.All += data =>
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -62,6 +64,16 @@ public sealed class EtwSnapTraceParser : SourceParser<EtwSnapEvent, EtwSnapParsi
                         return;
                     }
 
+                    if (parsedEvent is FrameCapturedEvent frame && qpcFrequency > 0)
+                    {
+#pragma warning disable CS0618
+                        var eventQpc = data.TimeStampQPC;
+#pragma warning restore CS0618
+                        parsedEvent = frame with
+                        {
+                            Timestamp = PresentationTimestamp(frame.PresentationTime100ns, eventQpc, qpcFrequency, frame.Timestamp),
+                        };
+                    }
                     parsedEvent = parsedEvent with { SourcePath = sourcePath };
                     var timestamp = parsedEvent.Timestamp.ToNanoseconds;
                     firstTimestampNanoseconds = firstTimestampNanoseconds is null
@@ -106,7 +118,7 @@ public sealed class EtwSnapTraceParser : SourceParser<EtwSnapEvent, EtwSnapParsi
             EtwSnap.WpaPlugin.Artifacts.ArtifactResolver.SupportedManifestSchemaVersion,
             cancellationToken).GetAwaiter().GetResult();
         var manifest = archive.Manifest;
-        var firstQpc = manifest.Frames!.Count == 0 ? 0 : manifest.Frames.Min(frame => frame.CallbackQpc);
+        var firstPresentationTime = manifest.Frames!.Count == 0 ? 0 : manifest.Frames.Min(frame => frame.PresentationTime100ns);
         long? archiveFirst = null;
         long? archiveLast = null;
 
@@ -118,10 +130,9 @@ public sealed class EtwSnapTraceParser : SourceParser<EtwSnapEvent, EtwSnapParsi
             checked((ulong)manifest.Capture.BufferMegabytes * 1024 * 1024),
             checked((uint)manifest.Capture.Target!.Kind),
             checked((ulong)manifest.Capture.Target.Handle)));
-        foreach (var frame in manifest.Frames.OrderBy(frame => frame.CallbackQpc))
+        foreach (var frame in manifest.Frames.OrderBy(frame => frame.PresentationTime100ns))
         {
-            var relativeQpc = Math.Max(0, frame.CallbackQpc - firstQpc);
-            var timestamp = checked((long)((decimal)relativeQpc * 1_000_000_000m / manifest.QpcFrequency));
+            var timestamp = checked((frame.PresentationTime100ns - firstPresentationTime) * 100);
             Process(new FrameCapturedEvent(
                 Timestamp.FromNanoseconds(timestamp),
                 manifest.SessionId,
@@ -225,6 +236,13 @@ public sealed class EtwSnapTraceParser : SourceParser<EtwSnapEvent, EtwSnapParsi
             parsedEvent = null!;
             return false;
         }
+    }
+
+    internal static Timestamp PresentationTimestamp(long presentationTime100ns, long referenceQpc, long qpcFrequency, Timestamp referenceTimestamp)
+    {
+        var nanoseconds = referenceTimestamp.ToNanoseconds + (decimal)presentationTime100ns * 100m
+            - (decimal)referenceQpc * 1_000_000_000m / qpcFrequency;
+        return Timestamp.FromNanoseconds(checked((long)nanoseconds));
     }
 
     private static T Payload<T>(TraceEvent data, string name)

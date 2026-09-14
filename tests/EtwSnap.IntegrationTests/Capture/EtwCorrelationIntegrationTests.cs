@@ -91,6 +91,7 @@ public sealed class EtwCorrelationIntegrationTests
             trace.Stop();
 
             var events = new Dictionary<ulong, CorrelationEvent>();
+            var presentationTimes = new Dictionary<ulong, long>();
             ParsedArtifactReference? parsedReference = null;
             ParsedArtifactCommitted? parsedCommitted = null;
             var eventOrdinal = 0;
@@ -119,6 +120,12 @@ public sealed class EtwCorrelationIntegrationTests
                             Convert.ToInt64(data.PayloadByName("CallbackQpc")),
                             Convert.ToUInt32(data.PayloadByName("Width")),
                             Convert.ToUInt32(data.PayloadByName("Height")))));
+#pragma warning disable CS0618
+                        presentationTimes.Add(frameNumber, checked((long)(
+                            checked((long)(data.TimeStampRelativeMSec * 1_000_000d))
+                            + (decimal)events[frameNumber].PresentationTime100ns * 100m
+                            - (decimal)data.TimeStampQPC * 1_000_000_000m / Stopwatch.Frequency)));
+#pragma warning restore CS0618
                         break;
                     case "ArtifactReference":
                         parsedReference = new ParsedArtifactReference(
@@ -168,6 +175,8 @@ public sealed class EtwCorrelationIntegrationTests
                 retainedFrames.Count,
                 pluginEvents.Events.OfType<FrameCapturedEvent>().Count(
                     frame => frame.SessionId == sessionId && retainedFrames.ContainsKey(frame.FrameNumber)));
+            Assert.All(pluginEvents.Events.OfType<FrameCapturedEvent>(), frame =>
+                Assert.Equal(presentationTimes[frame.FrameNumber], frame.Timestamp.ToNanoseconds));
             Assert.Single(pluginEvents.Events.OfType<EtwSnap.WpaPlugin.Parsing.ArtifactReferenceEvent>());
             Assert.Single(pluginEvents.Events.OfType<EtwSnap.WpaPlugin.Parsing.ArtifactCommittedEvent>());
         }

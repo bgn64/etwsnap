@@ -20,6 +20,7 @@ class FrameRing
 public:
     explicit FrameRing(std::uint64_t byteBudget);
 
+    winrt::com_ptr<ID3D11Texture2D> TakeReusableTexture(const D3D11_TEXTURE2D_DESC& description, std::uint64_t logicalBytes);
     AddFrameResult Add(CapturedFrame frame);
     std::vector<CapturedFrame> Snapshot() const;
     std::uint64_t Count() const;

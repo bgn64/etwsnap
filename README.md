@@ -151,7 +151,7 @@ The native callback is the sole authority for frame identity and timing. For eac
 4. Emits `FrameCaptured` from that callback.
 5. Copies and retains the corresponding GPU texture.
 
-The stable join key is `(SessionId, FrameNumber)`. Both the ETW event and manifest also carry presentation time, callback QPC, and dimensions. Event-header time remains an independent ETW trace timestamp.
+The stable join key is `(SessionId, FrameNumber)`. Both the ETW event and manifest also carry presentation time, callback QPC, and dimensions. WPA places screenshots on the ETL timeline using compositor presentation time, not callback or event-write time. Event-header time remains independent; compositor time does not guarantee physical display scanout timing.
 
 Provider:
 
@@ -175,7 +175,7 @@ EtwSnap.WpaPlugin Public Performance Toolkit SDK processor and WPA tables
 
 The host is an on-demand process, not a Windows Service. Host locks and named pipes are scoped by the current user's SID, Windows session, and privilege level, and the pipe uses current-user-only access. Before reading a command, the host impersonates the connected client and requires its SID, session, and elevation to match the host. Standard and elevated hosts therefore cannot be reused across the privilege boundary. A separate capture lease preserves one active recording per Windows session. Hosts exit after five idle minutes.
 
-Frames remain in GPU memory during capture. The ring evicts oldest textures according to actual logical BGRA bytes, preserving frame numbers and reporting evictions. A host crash loses retained frames by design; local recovery state is used to detect the abandoned session and clean up only ETWSnap's named WPR instance.
+Frames remain in GPU memory during capture. The ring evicts oldest textures according to actual logical BGRA bytes, preserving frame numbers and reporting evictions. Once full, it reuses a compatible texture due for eviction instead of allocating a new one; retained screenshots are never overwritten. WGC's `MinUpdateInterval` limits frame production where supported, with callback-based throttling on older Windows versions. GPU readback and PNG encoding occur only after capture stops. A host crash loses retained frames by design; local recovery state is used to detect the abandoned session and clean up only ETWSnap's named WPR instance.
 
 ## Requirements
 
