@@ -4,7 +4,7 @@
 
 ## Tables
 
-`ETWSnap Screenshots` exposes every `FrameCaptured` event with ETW event-header time assigned to the WPA `StartTime` role. Duration extends to the next frame in the same session, or to `RecordingStopped` for the final frame.
+`ETWSnap Screenshots` exposes every `FrameCaptured` event as a point at its compositor presentation time. Selecting a screenshot represents that instant, not a range extending to the next frame. Screenshot configurations bind only the `StartTime` role and do not expose an inferred duration.
 
 Configurations:
 
@@ -20,7 +20,9 @@ Right-click exactly one saved row to use:
 
 Both commands revalidate that the PNG still exists when invoked. They safely do nothing for non-persisted frames, missing files, invalid rows, or multiple selected rows. SDK `1.2.2-preview` does not expose selection-aware command enablement, so the commands remain visible in the `All Frames` configuration; use `Saved Screenshots` to hide non-persisted rows entirely.
 
-`ETWSnap Sessions` exposes lifecycle settings, frame statistics, artifact resolution state, manifest path, and integrity diagnostics. Both tables assign public `StartTime` and `Duration` column roles so they can share selection and zoom with other tables in the same WPA Analysis tab.
+`ETWSnap Sessions` exposes lifecycle settings, frame statistics, artifact resolution state, manifest path, and integrity diagnostics. Sessions plot `Start Time` and `End Time` as interval bars, with public `StartTime`, `EndTime`, and `Duration` roles for range selection. Missing lifecycle events use the available capture data to estimate session bounds.
+
+Every data column in both tables has a short tooltip describing its meaning. Time columns use SDK timestamp types so WPA can change their displayed units. Both tables can share selection and zoom with other tables in the same WPA Analysis tab.
 
 The first plugin version is table-only. It does not provide thumbnails, image preview, custom docking, or a preset WPA layout.
 
@@ -82,7 +84,9 @@ For a smoke capture, validate:
 2. Graph Explorer contains `ETWSnap Screenshots` and `ETWSnap Sessions`.
 3. Sessions shows the captured session ID and frame statistics.
 4. Screenshots shows the expected rows and normal cache paths under `%LOCALAPPDATA%\EtwSnap\WpaCache`.
-5. An ETWSnap graph and an XPerf graph in the same Analysis tab follow the same zoom and highlighted time range.
+5. Selecting a screenshot emphasizes its timestamp without extending a range to the next screenshot; selecting a session highlights its start-to-end bar.
+6. Column-header tooltips describe the data, and time columns offer unit formatting.
+7. An ETWSnap graph and an XPerf graph in the same Analysis tab follow the same zoom and time selection.
 
 If the plugin does not appear, open `Window > Diagnostic Console` and capture the complete load error, then retry with `-NoDefault` to distinguish plugin loading from interaction with default processing sources.
 

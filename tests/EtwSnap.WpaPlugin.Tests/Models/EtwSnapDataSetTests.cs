@@ -1,6 +1,7 @@
 using EtwSnap.WpaPlugin.Artifacts;
 using EtwSnap.WpaPlugin.Models;
 using EtwSnap.WpaPlugin.Parsing;
+using EtwSnap.WpaPlugin.Tables;
 using Microsoft.Performance.SDK;
 
 namespace EtwSnap.WpaPlugin.Tests.Models;
@@ -30,6 +31,8 @@ public sealed class EtwSnapDataSetTests
         var secondFrame = Assert.Single(dataSet.Screenshots, frame => frame.SessionId == secondSession);
         Assert.Equal([200L, 200L], firstFrames.Select(frame => frame.Duration.ToNanoseconds));
         Assert.Equal(200, secondFrame.Duration.ToNanoseconds);
+        Assert.Equal(500, Projectors.SessionEnd(Assert.Single(dataSet.Sessions, session => session.SessionId == firstSession)).ToNanoseconds);
+        Assert.Equal(400, Projectors.SessionEnd(Assert.Single(dataSet.Sessions, session => session.SessionId == secondSession)).ToNanoseconds);
         Assert.All(dataSet.Sessions, session => Assert.Equal(ArtifactResolutionState.NotFound, session.ArtifactState));
     }
 
@@ -75,6 +78,7 @@ public sealed class EtwSnapDataSetTests
 
         Assert.Equal(100, session.StartTime.ToNanoseconds);
         Assert.Equal(0, session.Duration.ToNanoseconds);
+        Assert.Equal(100, Projectors.SessionEnd(session).ToNanoseconds);
     }
 
     [Fact]
@@ -88,6 +92,29 @@ public sealed class EtwSnapDataSetTests
 
         Assert.Equal(2, dataSet.Sessions.Count);
         Assert.Equal(2, dataSet.Screenshots.Count);
+    }
+
+    [Fact]
+    public void ScreenshotClockValuesAreTraceTimestamps()
+    {
+        var sessionId = Guid.NewGuid();
+        var started = Started(sessionId, 0);
+        var frame = new FrameCapturedEvent(
+            Timestamp.FromNanoseconds(100_000_000), sessionId, 1,
+            10_000_000, 10_050_000, 2, 2, 1);
+
+        var screenshot = Assert.Single(EtwSnapDataSet.Build([started, frame]).Screenshots);
+
+        Assert.Equal(100_000_000, screenshot.PresentationTime.ToNanoseconds);
+        Assert.Equal(105_000_000, screenshot.CallbackTime?.ToNanoseconds);
+    }
+
+    [Fact]
+    public void CallbackTimeIsUnavailableWithoutQpcFrequency()
+    {
+        var screenshot = Assert.Single(EtwSnapDataSet.Build([Frame(Guid.NewGuid(), 1, 100)]).Screenshots);
+
+        Assert.Null(screenshot.CallbackTime);
     }
 
     private static RecordingStartedEvent Started(Guid sessionId, long nanoseconds) => new(

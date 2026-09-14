@@ -17,24 +17,44 @@ public static class SessionsTable
         requiredDataCookers: new[] { EtwSnapEventCooker.DataCookerPath });
 
     private static readonly ColumnConfiguration StartTimeColumn = Column(
-        "{207E58B9-B74D-4C90-B7B2-DCED4C731570}", "Start Time", 120, TimestampFormatter.FormatMicrosecondsGrouped, AggregationMode.Min);
+        "{207E58B9-B74D-4C90-B7B2-DCED4C731570}", "Start Time", 120,
+        "Time the screen-recording session started. Estimated from available capture data if the start is missing.", TimestampFormatter.FormatMicrosecondsGrouped, AggregationMode.Min);
+    private static readonly ColumnConfiguration EndTimeColumn = Column(
+        "{10E6B21A-2A6A-4B67-9F6E-355B682D6CC3}", "End Time", 120,
+        "Time the screen-recording session stopped. Estimated from available capture data if the stop is missing.", TimestampFormatter.FormatMicrosecondsGrouped, AggregationMode.Max);
     private static readonly ColumnConfiguration DurationColumn = Column(
-        "{5FE340A7-A2E0-409F-B696-377B0BCB4715}", "Duration", 100, TimestampFormatter.FormatMillisecondsGrouped, AggregationMode.Sum);
-    private static readonly ColumnConfiguration SessionIdColumn = Column("{49AEE0FB-917C-4752-B34E-E98C5D301E3E}", "Session ID", 240);
-    private static readonly ColumnConfiguration FramesPerSecondColumn = Column("{53DB1A91-A64B-4912-B087-197E7A72273F}", "FPS", 70);
-    private static readonly ColumnConfiguration BufferBytesColumn = Column("{912F7928-C0A3-4F58-B10C-EE979EFA9C4E}", "Buffer Bytes", 110);
-    private static readonly ColumnConfiguration TargetKindColumn = Column("{158B860D-1EC7-4361-9FE6-4EC6FBAC545E}", "Target Kind", 100);
-    private static readonly ColumnConfiguration TargetHandleColumn = Column("{44819345-E048-4262-B77E-532921315585}", "Target Handle", 120);
-    private static readonly ColumnConfiguration AcceptedFramesColumn = Column("{DF4F8C10-AECD-401B-B4D4-384C8ECB2040}", "Accepted", 90);
-    private static readonly ColumnConfiguration RetainedFramesColumn = Column("{552D706C-84DD-4F1A-AE64-EFE8FC636E21}", "Retained", 90);
-    private static readonly ColumnConfiguration EvictedFramesColumn = Column("{6117C61D-60F4-4619-9E2C-445459A3A12D}", "Evicted", 90);
-    private static readonly ColumnConfiguration DroppedFramesColumn = Column("{160FA7E4-9C3E-49B4-A6BE-8975913AE6F1}", "Dropped", 90);
-    private static readonly ColumnConfiguration ErrorCountColumn = Column("{B9F92C85-7FC3-4079-A2BE-02A6251B5EED}", "Errors", 80);
-    private static readonly ColumnConfiguration ExportedFramesColumn = Column("{61F1773A-8057-4910-B62A-10B12F414A90}", "Exported", 90);
-    private static readonly ColumnConfiguration FailedFramesColumn = Column("{35AE7710-3527-436F-92D1-0ECEB2F45E8F}", "Failed", 80);
-    private static readonly ColumnConfiguration ArtifactStateColumn = Column("{8D2D59D8-FBC2-48B7-8DA0-978F0FDD791A}", "Artifact State", 130);
-    private static readonly ColumnConfiguration ManifestPathColumn = Column("{77856A34-E15E-4261-B290-4D9B77482622}", "Manifest Path", 360);
-    private static readonly ColumnConfiguration ArtifactDetailColumn = Column("{5E39D902-A0B4-4F24-AD3F-C37A85FF1290}", "Artifact Detail", 320);
+        "{5FE340A7-A2E0-409F-B696-377B0BCB4715}", "Duration", 100,
+        "Time between the session's start and end.", TimestampFormatter.FormatMillisecondsGrouped, AggregationMode.Sum);
+    private static readonly ColumnConfiguration SessionIdColumn = Column(
+        "{49AEE0FB-917C-4752-B34E-E98C5D301E3E}", "Session ID", 240, "Unique identifier of the screen-recording session.");
+    private static readonly ColumnConfiguration FramesPerSecondColumn = Column(
+        "{53DB1A91-A64B-4912-B087-197E7A72273F}", "FPS", 70, "Requested capture rate in frames per second.");
+    private static readonly ColumnConfiguration BufferBytesColumn = Column(
+        "{912F7928-C0A3-4F58-B10C-EE979EFA9C4E}", "Buffer Bytes", 110, "Memory budget for retained screenshot pixels, in bytes.");
+    private static readonly ColumnConfiguration TargetKindColumn = Column(
+        "{158B860D-1EC7-4361-9FE6-4EC6FBAC545E}", "Target Kind", 100, "Capture target type: primary monitor, monitor, or window.");
+    private static readonly ColumnConfiguration TargetHandleColumn = Column(
+        "{44819345-E048-4262-B77E-532921315585}", "Target Handle", 120, "Windows handle identifying the requested monitor or window.");
+    private static readonly ColumnConfiguration AcceptedFramesColumn = Column(
+        "{DF4F8C10-AECD-401B-B4D4-384C8ECB2040}", "Accepted", 90, "Frames accepted by the capture rate limit, including frames later evicted or dropped.");
+    private static readonly ColumnConfiguration RetainedFramesColumn = Column(
+        "{552D706C-84DD-4F1A-AE64-EFE8FC636E21}", "Retained", 90, "Frames remaining in the screenshot buffer when recording stopped.");
+    private static readonly ColumnConfiguration EvictedFramesColumn = Column(
+        "{6117C61D-60F4-4619-9E2C-445459A3A12D}", "Evicted", 90, "Older frames removed to make room in the screenshot buffer.");
+    private static readonly ColumnConfiguration DroppedFramesColumn = Column(
+        "{160FA7E4-9C3E-49B4-A6BE-8975913AE6F1}", "Dropped", 90, "Accepted frames the screenshot buffer could not retain. Excludes rate-limited frames.");
+    private static readonly ColumnConfiguration ErrorCountColumn = Column(
+        "{B9F92C85-7FC3-4079-A2BE-02A6251B5EED}", "Errors", 80, "Errors reported by the native capture component.");
+    private static readonly ColumnConfiguration ExportedFramesColumn = Column(
+        "{61F1773A-8057-4910-B62A-10B12F414A90}", "Exported", 90, "Retained frames successfully saved as screenshot PNGs.");
+    private static readonly ColumnConfiguration FailedFramesColumn = Column(
+        "{35AE7710-3527-436F-92D1-0ECEB2F45E8F}", "Failed", 80, "Retained frames that could not be saved as screenshot PNGs.");
+    private static readonly ColumnConfiguration ArtifactStateColumn = Column(
+        "{8D2D59D8-FBC2-48B7-8DA0-978F0FDD791A}", "Artifact State", 130, "Result of locating and validating the session's saved screenshot artifacts.");
+    private static readonly ColumnConfiguration ManifestPathColumn = Column(
+        "{77856A34-E15E-4261-B290-4D9B77482622}", "Manifest Path", 360, "Location of the artifact manifest describing the saved screenshots.");
+    private static readonly ColumnConfiguration ArtifactDetailColumn = Column(
+        "{5E39D902-A0B4-4F24-AD3F-C37A85FF1290}", "Artifact Detail", 320, "Additional information about finding or validating the screenshot artifacts.");
 
     public static void BuildTable(ITableBuilder tableBuilder, IDataExtensionRetrieval requiredData)
     {
@@ -42,8 +62,36 @@ public static class SessionsTable
             new DataOutputPath(EtwSnapEventCooker.DataCookerPath, nameof(EtwSnapEventCooker.Events)));
         var rows = EtwSnapDataSet.Build(events).Sessions;
         var row = Projection.Index(rows);
+        var configuration = CreateConfiguration();
+
+        tableBuilder.AddTableConfiguration(configuration);
+        tableBuilder.SetDefaultTableConfiguration(configuration);
+        tableBuilder.SetRowCount(rows.Count)
+            .AddColumn(StartTimeColumn, row.Compose(Projectors.SessionStart))
+            .AddColumn(EndTimeColumn, row.Compose(Projectors.SessionEnd))
+            .AddColumn(DurationColumn, row.Compose(Projectors.SessionDuration))
+            .AddColumn(SessionIdColumn, row.Compose(Projectors.SessionId))
+            .AddColumn(FramesPerSecondColumn, row.Compose(Projectors.FramesPerSecond))
+            .AddColumn(BufferBytesColumn, row.Compose(Projectors.BufferBytes))
+            .AddColumn(TargetKindColumn, row.Compose(Projectors.TargetKind))
+            .AddColumn(TargetHandleColumn, row.Compose(Projectors.TargetHandle))
+            .AddColumn(AcceptedFramesColumn, row.Compose(Projectors.AcceptedFrames))
+            .AddColumn(RetainedFramesColumn, row.Compose(Projectors.RetainedFrames))
+            .AddColumn(EvictedFramesColumn, row.Compose(Projectors.EvictedFrames))
+            .AddColumn(DroppedFramesColumn, row.Compose(Projectors.DroppedFrames))
+            .AddColumn(ErrorCountColumn, row.Compose(Projectors.ErrorCount))
+            .AddColumn(ExportedFramesColumn, row.Compose(Projectors.ExportedFrames))
+            .AddColumn(FailedFramesColumn, row.Compose(Projectors.FailedFrames))
+            .AddColumn(ArtifactStateColumn, row.Compose(Projectors.ArtifactState))
+            .AddColumn(ManifestPathColumn, row.Compose(Projectors.ManifestPath))
+            .AddColumn(ArtifactDetailColumn, row.Compose(Projectors.ArtifactDetail));
+    }
+
+    internal static TableConfiguration CreateConfiguration()
+    {
         var configuration = new TableConfiguration("Sessions")
         {
+            ChartType = ChartType.Line,
             Columns = new[]
             {
                 SessionIdColumn,
@@ -65,40 +113,23 @@ public static class SessionsTable
                 DurationColumn,
                 TableConfiguration.GraphColumn,
                 StartTimeColumn,
+                EndTimeColumn,
             },
         };
         configuration.AddColumnRole(ColumnRole.StartTime, StartTimeColumn);
+        configuration.AddColumnRole(ColumnRole.EndTime, EndTimeColumn);
         configuration.AddColumnRole(ColumnRole.Duration, DurationColumn);
-
-        tableBuilder.AddTableConfiguration(configuration);
-        tableBuilder.SetDefaultTableConfiguration(configuration);
-        tableBuilder.SetRowCount(rows.Count)
-            .AddColumn(StartTimeColumn, row.Compose(Projectors.SessionStart))
-            .AddColumn(DurationColumn, row.Compose(Projectors.SessionDuration))
-            .AddColumn(SessionIdColumn, row.Compose(Projectors.SessionId))
-            .AddColumn(FramesPerSecondColumn, row.Compose(Projectors.FramesPerSecond))
-            .AddColumn(BufferBytesColumn, row.Compose(Projectors.BufferBytes))
-            .AddColumn(TargetKindColumn, row.Compose(Projectors.TargetKind))
-            .AddColumn(TargetHandleColumn, row.Compose(Projectors.TargetHandle))
-            .AddColumn(AcceptedFramesColumn, row.Compose(Projectors.AcceptedFrames))
-            .AddColumn(RetainedFramesColumn, row.Compose(Projectors.RetainedFrames))
-            .AddColumn(EvictedFramesColumn, row.Compose(Projectors.EvictedFrames))
-            .AddColumn(DroppedFramesColumn, row.Compose(Projectors.DroppedFrames))
-            .AddColumn(ErrorCountColumn, row.Compose(Projectors.ErrorCount))
-            .AddColumn(ExportedFramesColumn, row.Compose(Projectors.ExportedFrames))
-            .AddColumn(FailedFramesColumn, row.Compose(Projectors.FailedFrames))
-            .AddColumn(ArtifactStateColumn, row.Compose(Projectors.ArtifactState))
-            .AddColumn(ManifestPathColumn, row.Compose(Projectors.ManifestPath))
-            .AddColumn(ArtifactDetailColumn, row.Compose(Projectors.ArtifactDetail));
+        return configuration;
     }
 
     private static ColumnConfiguration Column(
         string id,
         string name,
         int width,
+        string description,
         string? cellFormat = null,
         AggregationMode aggregationMode = AggregationMode.None) => new(
-            new ColumnMetadata(Guid.Parse(id), name),
+            new ColumnMetadata(Guid.Parse(id), name, description) { ShortDescription = description },
             new UIHints
             {
                 IsVisible = true,

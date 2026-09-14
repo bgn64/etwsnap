@@ -83,8 +83,8 @@ public sealed class ScreenshotTableCommandsTests
         1,
         1,
         1,
-        0,
-        0);
+        Timestamp.Zero,
+        Timestamp.Zero);
 
     private sealed class TemporaryImage : IDisposable
     {
