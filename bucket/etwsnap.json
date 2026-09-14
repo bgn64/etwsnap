@@ -1,12 +1,12 @@
 {
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Rolling screenshot capture correlated with ETW events.",
   "homepage": "https://github.com/bgn64/etwsnap",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/bgn64/etwsnap/releases/download/v0.3.1/etwsnap-v0.3.1-win-x64.zip",
-      "hash": "675ff9b4a41ca4af76742a445ff8d5f38669a05e62c7186ca7ca850432ffcb31"
+      "url": "https://github.com/bgn64/etwsnap/releases/download/v0.3.2/etwsnap-v0.3.2-win-x64.zip",
+      "hash": "c2905d86779073305f1fa54e0cbc15437512449a4bb1c274eec91294ab044ae2"
     }
   },
   "bin": "etwsnap.exe",
