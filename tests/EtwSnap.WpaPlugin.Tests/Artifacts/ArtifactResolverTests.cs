@@ -19,7 +19,7 @@ public sealed class ArtifactResolverTests
     {
         using var fixture = new ArtifactFixture();
         var sessionId = Guid.NewGuid();
-        var zipPath = await fixture.WriteScreenshotOnlyBundleAsync(sessionId, [[137, 80, 78, 71]]);
+        var zipPath = await fixture.WriteScreenshotOnlyBundleAsync(sessionId, [[137, 80, 78, 71], [137, 80, 78, 71]]);
         var collector = new PluginEventCollector();
         var parser = new EtwSnapTraceParser([new FileDataSource(zipPath)]);
         var logger = new RecordingLogger();
@@ -28,13 +28,20 @@ public sealed class ArtifactResolverTests
         var dataSet = EtwSnapDataSet.Build(collector.Events);
 
         Assert.Single(dataSet.Sessions);
-        var screenshot = Assert.Single(dataSet.Screenshots);
-        Assert.Equal(ScreenshotAvailability.Saved, screenshot.Availability);
-        Assert.True(File.Exists(screenshot.ImagePath));
+        Assert.Equal([0L, 33_333_300L], dataSet.Screenshots.Select(frame => frame.StartTime.ToNanoseconds));
+        Assert.Equal(33_333_300L, dataSet.Screenshots[0].Duration.ToNanoseconds);
+        Assert.All(dataSet.Screenshots, screenshot =>
+        {
+            Assert.Equal(ScreenshotAvailability.Saved, screenshot.Availability);
+            Assert.True(File.Exists(screenshot.ImagePath));
+        });
         Assert.Contains(logger.Messages, message => message.Contains("artifact discovery started", StringComparison.Ordinal));
         Assert.Contains(logger.Messages, message => message.Contains("Selected direct artifact ZIP", StringComparison.Ordinal));
         Assert.Contains(logger.Messages, message => message.Contains("State=Resolved", StringComparison.Ordinal));
-        File.Delete(screenshot.ImagePath!);
+        foreach (var screenshot in dataSet.Screenshots)
+        {
+            File.Delete(screenshot.ImagePath!);
+        }
     }
 
     [Fact]
@@ -329,7 +336,8 @@ public sealed class ArtifactResolverTests
                 sessionId,
                 imageBytes,
                 Path.Combine(Root, EmbeddedArtifactConstants.GetArtifactFileName("screenshots")),
-                bindToEtl: false);
+                bindToEtl: false,
+                presentationInterval100ns: 333_333);
 
         internal async Task<string> WriteBundleAsync(
             Guid sessionId,
@@ -337,7 +345,8 @@ public sealed class ArtifactResolverTests
             string zipPath,
             string? framePathOverride = null,
             bool bindToEtl = true,
-            string? etlPath = null)
+            string? etlPath = null,
+            long presentationInterval100ns = 1)
         {
             var source = Path.Combine(Root, "embedded-source");
             Directory.CreateDirectory(Path.Combine(source, "frames"));
@@ -345,7 +354,7 @@ public sealed class ArtifactResolverTests
             var frames = Enumerable.Range(0, frameCount).Select(index => new
             {
                 frameNumber = checked((ulong)index + 1),
-                presentationTime100ns = 1234L + index,
+                presentationTime100ns = 1234L + index * presentationInterval100ns,
                 callbackQpc = 5678L + index,
                 width = 2,
                 height = 2,

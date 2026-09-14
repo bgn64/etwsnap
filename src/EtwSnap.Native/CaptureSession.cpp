@@ -59,6 +59,11 @@ CaptureSession::CaptureSession(const EtwSnapCreateOptions& options)
         size);
     m_captureSession = m_framePool.CreateCaptureSession(m_item);
     m_captureSession.IsCursorCaptureEnabled(options.CaptureCursor != 0);
+    if (const auto throttledSession = m_captureSession.try_as<IGraphicsCaptureSession5>())
+    {
+        throttledSession.MinUpdateInterval(winrt::Windows::Foundation::TimeSpan{ 10'000'000 / options.FramesPerSecond });
+        m_minimumQpcInterval = 0;
+    }
 }
 
 CaptureSession::~CaptureSession()
@@ -330,7 +335,7 @@ void CaptureSession::OnFrameArrived(
         LARGE_INTEGER qpc{};
         check_bool(QueryPerformanceCounter(&qpc));
         const auto previous = m_lastAcceptedQpc.load();
-        if (previous != 0 && qpc.QuadPart - previous < m_minimumQpcInterval)
+        if (m_minimumQpcInterval > 0 && previous != 0 && qpc.QuadPart - previous < m_minimumQpcInterval)
         {
             ExitCallback();
             return;
@@ -363,8 +368,15 @@ void CaptureSession::OnFrameArrived(
         D3D11_TEXTURE2D_DESC textureDescription{};
         source->GetDesc(&textureDescription);
 
-        com_ptr<ID3D11Texture2D> copy;
-        check_hresult(m_d3dDevice->CreateTexture2D(&textureDescription, nullptr, copy.put()));
+        auto copy = m_ring.TakeReusableTexture(textureDescription, logicalBytes);
+        if (copy)
+        {
+            ++m_evictedFrames;
+        }
+        else
+        {
+            check_hresult(m_d3dDevice->CreateTexture2D(&textureDescription, nullptr, copy.put()));
+        }
         m_d3dContext->CopyResource(copy.get(), source.get());
 
         EtwSnapFrameInfo info{};

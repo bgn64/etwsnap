@@ -13,7 +13,9 @@ Frame identity is always the full `(SessionId, FrameNumber)` pair. Consumers mus
 - `FrameCaptureError`: session ID, frame number, and HRESULT.
 - `RecordingStopped`: session ID and accepted, retained, evicted, dropped, and error counts.
 
-The ETW event-header timestamp is the trace timeline timestamp. Presentation time and callback QPC are independent correlation and diagnostic values.
+The ETW event-header timestamp records event emission. WPA places screenshot rows at `PresentationTime100ns`, the WGC compositor timestamp, mapped to trace-relative nanoseconds using the ETL's QPC frequency and an event QPC/time anchor. `CallbackQpc` remains diagnostic metadata; callback and event-write delays do not determine screenshot placement. Compositor time is not a guarantee of physical display scanout time.
+
+When an artifact ZIP is opened directly, screenshot times are relative to the earliest retained presentation timestamp. Open the matching ETL to align screenshots with other ETW providers.
 
 ## Artifact events
 
