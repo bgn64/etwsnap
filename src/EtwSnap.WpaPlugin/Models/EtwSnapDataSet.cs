@@ -22,8 +22,8 @@ public sealed record ScreenshotRecord(
     uint Width,
     uint Height,
     uint PixelFormat,
-    long PresentationTime100ns,
-    long CallbackQpc);
+    Timestamp PresentationTime,
+    Timestamp? CallbackTime);
 
 public sealed record SessionRecord(
     Timestamp StartTime,
@@ -87,8 +87,8 @@ public sealed record EtwSnapDataSet(
                     frame.Width,
                     frame.Height,
                     frame.PixelFormat,
-                    frame.PresentationTime100ns,
-                    frame.CallbackQpc));
+                    frame.Timestamp,
+                    GetCallbackTime(frame, started?.QpcFrequency)));
             }
 
             sessions.Add(new SessionRecord(
@@ -112,5 +112,17 @@ public sealed record EtwSnapDataSet(
         }
 
         return new EtwSnapDataSet(screenshots, sessions);
+    }
+
+    private static Timestamp? GetCallbackTime(FrameCapturedEvent frame, ulong? qpcFrequency)
+    {
+        if (qpcFrequency is not > 0)
+        {
+            return null;
+        }
+
+        var callbackOffsetNanoseconds = (decimal)frame.CallbackQpc * 1_000_000_000m / qpcFrequency.Value
+            - (decimal)frame.PresentationTime100ns * 100m;
+        return Timestamp.FromNanoseconds(checked((long)(frame.Timestamp.ToNanoseconds + callbackOffsetNanoseconds)));
     }
 }

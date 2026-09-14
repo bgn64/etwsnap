@@ -14,10 +14,11 @@ internal static class Projectors
     public static uint Width(ScreenshotRecord row) => row.Width;
     public static uint Height(ScreenshotRecord row) => row.Height;
     public static uint PixelFormat(ScreenshotRecord row) => row.PixelFormat;
-    public static long PresentationTime(ScreenshotRecord row) => row.PresentationTime100ns;
-    public static long CallbackQpc(ScreenshotRecord row) => row.CallbackQpc;
+    public static Timestamp PresentationTime(ScreenshotRecord row) => row.PresentationTime;
+    public static Timestamp? CallbackTime(ScreenshotRecord row) => row.CallbackTime;
 
     public static Timestamp SessionStart(SessionRecord row) => row.StartTime;
+    public static Timestamp SessionEnd(SessionRecord row) => row.StartTime + row.Duration;
     public static TimestampDelta SessionDuration(SessionRecord row) => row.Duration;
     public static string SessionId(SessionRecord row) => row.SessionId.ToString("D");
     public static uint? FramesPerSecond(SessionRecord row) => row.FramesPerSecond;
